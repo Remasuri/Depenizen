@@ -24,6 +24,10 @@
             <url>https://maven.citizensnpcs.co/repo</url>
         </repository>
         <repository>
+            <id>glaremasters-repo</id>
+            <url>https://repo.glaremasters.me/repository/towny/</url>
+        </repository>
+        <repository>
             <id>placeholderapi</id>
             <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
         </repository>
@@ -331,11 +335,11 @@
             <systemPath>${basedir}/lib/TerrainControl.jar</systemPath>
         </dependency>
         <dependency>
-            <groupId>com.palmergames</groupId>
-            <artifactId>Towny</artifactId>
-            <version>0.98.5.0</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/Towny.jar</systemPath>
+            <groupId>com.palmergames.bukkit.towny</groupId>
+            <artifactId>towny</artifactId>
+            <version>0.102.0.0</version>
+            <scope>provided</scope>
+<!--            <systemPath>${basedir}/lib/Towny.jar</systemPath> -->
         </dependency>
         <dependency>
             <groupId>com.palmergames</groupId>

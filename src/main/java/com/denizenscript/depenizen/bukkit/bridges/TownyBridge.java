@@ -75,7 +75,7 @@ public class TownyBridge extends Bridge {
         if (attribute.startsWith("list_towns")) {
             ListTag towns = new ListTag();
             if (attribute.hasParam()) {
-                TownyWorld world = TownyAPI.getInstance().getDataSource().getWorld(attribute.getParam().replace("w@", ""));
+                TownyWorld world = TownyAPI.getInstance().getTownyWorld(attribute.getParam().replace("w@", ""));
                 if (world == null) {
                     attribute.echoError("World specified is not a registered towny world!");
                     return;

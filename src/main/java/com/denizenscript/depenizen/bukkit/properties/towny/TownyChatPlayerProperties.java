@@ -111,7 +111,7 @@ public class TownyChatPlayerProperties implements Property {
                 if (perm == null) {
                     return new ElementTag(true).getObjectAttribute(attribute.fulfill(1));
                 }
-                return new ElementTag(TownyUniverse.getInstance().getPermissionSource().has(player.getPlayerEntity(), perm))
+                return new ElementTag(player.getPlayerEntity().hasPermission(perm))
                         .getObjectAttribute(attribute.fulfill(1));
             }
 

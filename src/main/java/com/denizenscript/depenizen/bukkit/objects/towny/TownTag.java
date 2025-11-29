@@ -8,6 +8,7 @@ import com.denizenscript.denizencore.flags.RedirectionFlagTracker;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.exceptions.NotRegisteredException;
 import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.*;
@@ -226,7 +227,16 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "board", (attribute, object) -> {
             return new ElementTag(object.town.getBoard());
         });
-
+        // <--[tag]
+        // @attribute <TownTag.tag>
+        // @returns ElementTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the town's current tag.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "tag", (attribute, object) -> {
+            return new ElementTag(object.town.getTag());
+        });
         // <--[tag]
         // @attribute <TownTag.members_by_rank[<rank>]>
         // @returns ListTag
@@ -421,7 +431,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // Returns if the town has explosions turned on.
         // -->
         tagProcessor.registerTag(ElementTag.class, "has_explosions", (attribute, object) -> {
-            return new ElementTag(object.town.isBANG());
+            return new ElementTag(object.town.isExplosion());
         });
 
         // <--[tag]
@@ -529,7 +539,16 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "plottax", (attribute, object) -> {
             return new ElementTag(object.town.getPlotTax());
         });
-
+        // <--[tag]
+        // @attribute <TownTag.town_level>
+        // @returns ElementTag(Number)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the level of the town
+        // -->
+        tagProcessor.registerTag(ElementTag.class,"town_level",(Attribute,object) -> {
+            return new ElementTag(object.town.getLevelNumber());
+        });
         // <--[tag]
         // @attribute <TownTag.plotprice>
         // @returns ElementTag(Decimal)
@@ -554,7 +573,6 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
     public void applyProperty(Mechanism mechanism) {
         mechanism.echoError("Cannot apply properties to a Towny town!");
     }
-
     @Override
     public void adjust(Mechanism mechanism) {
 
@@ -575,6 +593,49 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
             town.getAccount().setBalance(new ElementTag(input.get(0)).asDouble(), input.get(1));
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name name
+        // @input ElementTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the name of a town.
+        // @tags
+        // <TownTag.name>
+        // -->
+        if (mechanism.matches("name")) {
+            String newName = mechanism.getValue().asString();
+            try {
+                TownyAPI.getInstance().getDataSource().renameTown(town, newName);
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Could not rename town: " + ex.getMessage());
+            }
+        }
+        if (mechanism.matches("tag")){
+            town.setTag(mechanism.getValue().asString());
+        }
+        if(mechanism.matches("board")){
+            town.setBoard(mechanism.getValue().asString());
+        }
+        if(mechanism.matches("has_pvp")){
+            town.setPVP(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_firespread")){
+            town.setFire(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_explosions")){
+            town.setExplosion(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_mobs")){
+            town.setHasMobs(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("is_public")){
+            town.setPublic(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("is_open")){
+            town.setOpen(mechanism.getValue().asBoolean());
         }
     }
 }
