@@ -35,6 +35,17 @@ public class PlotGroupCommand extends AbstractCommand  {
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Must specify a town and name!");
         }
+        if (townblocks != null) {
+            for (TownBlockTag townBlockTag : townblocks) {
+                TownBlock townBlock = townBlockTag.getTownBlock();
+                if (townBlock.getTownOrNull() != town.getTown()) {
+                    scriptEntry.setFinished(true);
+                    throw new InvalidArgumentsRuntimeException("townblocks must all be from the same town!");
+                }
+            }
+        }
+        TownyUniverse universe = TownyUniverse.getInstance();
+        var dataSource = universe.getDataSource();
         switch(action) {
             case CREATE -> {
                 //This might not be necessary, since Towny might no longer have this restriction in newer versions for internal data due to the fact that plotgroups now use UUIDs
@@ -47,12 +58,16 @@ public class PlotGroupCommand extends AbstractCommand  {
                 PlotGroup plotGroup = new PlotGroup(uuid,name,town.getTown());
                 if(townblocks != null){
                     for (TownBlockTag townBlockTag : townblocks) {
-                        plotGroup.addTownBlock(townBlockTag.getTownBlock());
-                        townBlockTag.getTownBlock().setPlotObjectGroup(plotGroup);
+                        TownBlock townBlock = townBlockTag.getTownBlock();
+                        plotGroup.addTownBlock(townBlock);
+                        townBlock.setPlotObjectGroup(plotGroup);
+                        dataSource.saveTownBlock(townBlock);
                     }
                 }
                 town.getTown().addPlotGroup(plotGroup);
-                TownyUniverse.getInstance().registerGroup(plotGroup);
+                universe.registerGroup(plotGroup);
+                dataSource.saveTown(town.getTown());
+                dataSource.savePlotGroup(plotGroup);
                 scriptEntry.setFinished(true);
             }
             case DELETE ->  {
@@ -64,9 +79,12 @@ public class PlotGroupCommand extends AbstractCommand  {
                 }
                 for(TownBlock townBlock : plotGroup.getTownBlocks()){
                     townBlock.removePlotObjectGroup();
+                    dataSource.saveTownBlock(townBlock);
                 }
                 town.getTown().removePlotGroup(plotGroup);
-                TownyUniverse.getInstance().unregisterGroup(plotGroup.getUUID());
+                universe.unregisterGroup(plotGroup.getUUID());
+                dataSource.saveTown(town.getTown());
+                dataSource.removePlotGroup(plotGroup);
                 scriptEntry.setFinished(true);
             }
         }

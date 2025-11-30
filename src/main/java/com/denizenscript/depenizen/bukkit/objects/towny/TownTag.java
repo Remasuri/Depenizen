@@ -236,6 +236,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.board>
         // @returns ElementTag
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.board
         // @description
         // Returns the town's current board.
         // -->
@@ -246,6 +247,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.tag>
         // @returns ElementTag
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.tag
         // @description
         // Returns the town's current tag.
         // -->
@@ -267,6 +269,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.is_open>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.is_open
         // @description
         // Returns true if the town is currently open.
         // -->
@@ -274,6 +277,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.town.isOpen());
         });
 
+        // <--[tag]
+        // @attribute <TownTag.trusted_residents>
+        // @returns ListTag(PlayerTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of residents that are trusted in the town as PlayerTags.
+        // -->
         tagProcessor.registerTag(ListTag.class, "trusted_residents", ((attribute, object) -> {
             ListTag list = new ListTag();
             for (Resident resident : object.town.getTrustedResidents()){
@@ -282,9 +292,27 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
             return  list;
         }));
+
+        // <--[tag]
+        // @attribute <TownTag.is_forsale>
+        // @returns ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @mechanism TownTag.is_forsale
+        // @description
+        // Returns true if the town is currently listed for sale.
+        // -->
         tagProcessor.registerTag(ElementTag.class,"is_forsale",((attribute, object) -> {
             return new ElementTag(object.town.isForSale());
         }));
+
+        // <--[tag]
+        // @attribute <TownTag.forsale_price>
+        // @returns ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @mechanism TownTag.forsale_price
+        // @description
+        // Returns the asking price when the town is for sale.
+        // -->
         tagProcessor.registerTag(ElementTag.class,"forsale_price",((attribute, object) -> {
             return new ElementTag(object.town.getForSalePrice());
         }));
@@ -292,6 +320,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.is_public>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.is_public
         // @description
         // Returns true if the town is currently public.
         // -->
@@ -403,6 +432,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.spawn>
         // @returns LocationTag
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.spawn
         // @description
         // Returns the spawn point of the object.town.
         // -->
@@ -456,6 +486,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.has_explosions>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.has_explosions
         // @description
         // Returns if the town has explosions turned on.
         // -->
@@ -467,6 +498,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.has_mobs>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.has_mobs
         // @description
         // Returns if the town has mobs turned on.
         // -->
@@ -478,6 +510,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.has_pvp>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.has_pvp
         // @description
         // Returns if the town has PvP turned on.
         // -->
@@ -489,6 +522,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @attribute <TownTag.has_firespread>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
+        // @mechanism TownTag.has_firespread
         // @description
         // Returns if the town has firespread turned on.
         // -->
@@ -525,6 +559,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return output;
         });
 
+        // <--[tag]
+        // @attribute <TownTag.list_plotgroups>
+        // @returns ListTag(PlotGroupTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of PlotGroupTags for all plot groups in the town.
+        // -->
         tagProcessor.registerTag(ListTag.class, "list_plotgroups",((attribute, object) -> {
             ListTag output = new ListTag();
             if (!object.town.hasPlotGroups()) {
@@ -601,6 +642,18 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "plotprice", (attribute, object) -> {
             return new ElementTag(object.town.getPlotPrice());
         });
+
+        // <--[tag]
+        // @attribute <TownTag.perm[<group>.<action>]>
+        // @returns ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @mechanism TownTag.perm
+        // @description
+        // Returns whether a permission is enabled for a specific group in this town.
+        // Valid groups: 'resident', 'ally', 'outsider' (with some alias names).
+        // Valid actions: 'build', 'destroy', 'switch', 'itemuse'.
+        // For example: <[town].perm[resident.build]>
+        // -->
         tagProcessor.registerTag(ElementTag.class, "perm", (attribute, object) -> {
             if (!attribute.hasContext(1)) {
                 return null;
@@ -674,6 +727,8 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
     @Override
     public void adjust(Mechanism mechanism) {
 
+        TownyUniverse universe = TownyUniverse.getInstance();
+        var dataSource = universe.getDataSource();
         // <--[mechanism]
         // @object TownTag
         // @name balance
@@ -711,36 +766,156 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("Could not rename town: " + ex.getMessage());
             }
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name tag
+        // @input ElementTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the tag of the town.
+        // @tags
+        // <TownTag.tag>
+        // -->
         if (mechanism.matches("tag")){
             town.setTag(mechanism.getValue().asString());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name board
+        // @input ElementTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the board (message) of the town.
+        // @tags
+        // <TownTag.board>
+        // -->
         if(mechanism.matches("board")){
             town.setBoard(mechanism.getValue().asString());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name has_pvp
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether PvP is enabled in the town.
+        // @tags
+        // <TownTag.has_pvp>
+        // -->
         if(mechanism.matches("has_pvp")){
             town.setPVP(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name has_firespread
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether fire spread is enabled in the town.
+        // @tags
+        // <TownTag.has_firespread>
+        // -->
         if(mechanism.matches("has_firespread")){
             town.setFire(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name has_explosions
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether explosions are enabled in the town.
+        // @tags
+        // <TownTag.has_explosions>
+        // -->
         if(mechanism.matches("has_explosions")){
             town.setExplosion(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name has_mobs
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether mobs are enabled in the town.
+        // @tags
+        // <TownTag.has_mobs>
+        // -->
         if(mechanism.matches("has_mobs")){
             town.setHasMobs(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name is_public
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether the town is public.
+        // @tags
+        // <TownTag.is_public>
+        // -->
         if(mechanism.matches("is_public")){
             town.setPublic(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name is_open
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether the town is open.
+        // @tags
+        // <TownTag.is_open>
+        // -->
         if(mechanism.matches("is_open")){
             town.setOpen(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name is_forsale
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets whether the town is listed for sale.
+        // @tags
+        // <TownTag.is_forsale>
+        // -->
         if(mechanism.matches("is_forsale")){
             town.setForSale(mechanism.getValue().asBoolean());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name forsale_price
+        // @input ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the asking price for the town when it is for sale.
+        // @tags
+        // <TownTag.forsale_price>
+        // -->
         if(mechanism.matches("forsale_price")){
             town.setForSalePrice(mechanism.getValue().asDouble());
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name add_trusted_resident
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Adds a trusted resident to the town.
+        // @tags
+        // <TownTag.trusted_residents>
+        // -->
         if(mechanism.matches("add_trusted_resident")){
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
@@ -750,9 +925,21 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
             if(resident == null){
                 mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+                return;
             }
             town.addTrustedResident(resident);
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name remove_trusted_resident
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Removes a trusted resident from the town.
+        // @tags
+        // <TownTag.trusted_residents>
+        // -->
         if(mechanism.matches("remove_trusted_resident")){
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
@@ -762,9 +949,25 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
             if(resident == null){
                 mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+                return;
             }
             town.removeTrustedResident(resident);
+            dataSource.saveTown(town);
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name perm
+        // @input ElementTag or ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets a permission value for a specific group and action in this town.
+        // Input should be in the form: "<group>.<action>|<boolean>"
+        // For example: "resident.build|true".
+        // Valid groups: resident, ally, outsider (with some alias names).
+        // Valid actions: build, destroy, switch, itemuse.
+        // @tags
+        // <TownTag.perm[<group>.<action>]>
+        // -->
         if (mechanism.matches("perm")) {
             ListTag input = mechanism.valueAsType(ListTag.class);
             if (input.size() != 2) {
@@ -858,15 +1061,26 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                         mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
                         return;
                 }
-
+                dataSource.saveTown(town);
             }
             catch (Exception ex) {
                 mechanism.echoError("Failed to set Town perm '" + spec + "': " + ex.getMessage());
             }
             return;
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name spawn
+        // @input LocationTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the spawn point of the town.
+        // @tags
+        // <TownTag.spawn>
+        // -->
         if(mechanism.matches("spawn")){
             town.setSpawn(mechanism.valueAsType(LocationTag.class));
+            dataSource.saveTown(town);
         }
     }
 }
