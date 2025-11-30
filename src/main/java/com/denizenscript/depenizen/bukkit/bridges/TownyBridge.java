@@ -2,6 +2,8 @@ package com.denizenscript.depenizen.bukkit.bridges;
 
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.depenizen.bukkit.events.towny.*;
+import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
+import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyCuboidProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyLocationProperties;
 import com.denizenscript.depenizen.bukkit.objects.towny.NationTag;
@@ -31,6 +33,8 @@ public class TownyBridge extends Bridge {
     public void init() {
         ObjectFetcher.registerWithObjectFetcher(TownTag.class, TownTag.tagProcessor);
         ObjectFetcher.registerWithObjectFetcher(NationTag.class, NationTag.tagProcessor);
+        ObjectFetcher.registerWithObjectFetcher(TownBlockTag.class,TownBlockTag.tagProcessor);
+        ObjectFetcher.registerWithObjectFetcher(PlotGroupTag.class, PlotGroupTag.tagProcessor);
         PropertyParser.registerProperty(TownyPlayerProperties.class, PlayerTag.class);
         TownyLocationProperties.register();
         PropertyParser.registerProperty(TownyCuboidProperties.class, CuboidTag.class);

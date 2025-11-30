@@ -1,6 +1,7 @@
 package com.denizenscript.depenizen.bukkit.properties.towny;
 
 import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.exceptions.NotRegisteredException;
@@ -131,6 +132,10 @@ public class TownyLocationProperties {
         // -->
         LocationTag.tagProcessor.registerTag(ElementTag.class, "is_wilderness", (attribute, location) -> {
             return new ElementTag(TownyAPI.getInstance().isWilderness(location));
+        });
+
+        LocationTag.tagProcessor.registerTag(TownBlockTag.class, "townblock",(attribute,location) -> {
+            return new TownBlockTag(TownyAPI.getInstance().getTownBlock(location));
         });
     }
 

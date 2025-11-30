@@ -1,5 +1,5 @@
 package com.denizenscript.depenizen.bukkit.objects.towny;
-
+import com.palmergames.bukkit.towny.object.TownyPermission;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
@@ -204,7 +204,22 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ListTag.class, "assistants", (attribute, object) -> {
             return getPlayersFromResidents(object.town.getRank("assistant"));
         });
-
+        // <--[tag]
+        // @attribute <TownTag.townblocks>
+        // @returns ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of the towns townblocks.
+        // -->
+        tagProcessor.registerTag(ListTag.class,"townblocks",(Attribute,object) -> {
+            ListTag list = new ListTag();
+            for (TownBlock townBlock : object.town.getTownBlocks()) {
+                if (townBlock != null){
+                    list.addObject(new TownBlockTag(townBlock));
+                }
+            }
+            return list;
+        });
         // <--[tag]
         // @attribute <TownTag.balance>
         // @returns ElementTag(Decimal)
@@ -259,6 +274,20 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.town.isOpen());
         });
 
+        tagProcessor.registerTag(ListTag.class, "trusted_residents", ((attribute, object) -> {
+            ListTag list = new ListTag();
+            for (Resident resident : object.town.getTrustedResidents()){
+                PlayerTag playerTag = new PlayerTag(resident.getPlayer());
+                list.addObject(playerTag);
+            }
+            return  list;
+        }));
+        tagProcessor.registerTag(ElementTag.class,"is_forsale",((attribute, object) -> {
+            return new ElementTag(object.town.isForSale());
+        }));
+        tagProcessor.registerTag(ElementTag.class,"forsale_price",((attribute, object) -> {
+            return new ElementTag(object.town.getForSalePrice());
+        }));
         // <--[tag]
         // @attribute <TownTag.is_public>
         // @returns ElementTag(Boolean)
@@ -559,7 +588,63 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "plotprice", (attribute, object) -> {
             return new ElementTag(object.town.getPlotPrice());
         });
+        tagProcessor.registerTag(ElementTag.class, "perm", (attribute, object) -> {
+            if (!attribute.hasContext(1)) {
+                return null;
+            }
+            String spec = attribute.getContext(1); // e.g. "resident.build"
+            String[] parts = spec.split("\\.", 2);
+            if (parts.length != 2) {
+                return null;
+            }
 
+            String group = CoreUtilities.toLowerCase(parts[0]);
+            String action = CoreUtilities.toLowerCase(parts[1]);
+
+            TownyPermission perms = object.town.getPermissions();
+
+            TownyPermission.ActionType actionType;
+            switch (action) {
+                case "build":
+                    actionType = TownyPermission.ActionType.BUILD;
+                    break;
+                case "destroy":
+                    actionType = TownyPermission.ActionType.DESTROY;
+                    break;
+                case "switch":
+                    actionType = TownyPermission.ActionType.SWITCH;
+                    break;
+                case "itemuse":
+                case "item_use":
+                    actionType = TownyPermission.ActionType.ITEM_USE;
+                    break;
+                default:
+                    return null;
+            }
+
+            boolean value;
+            switch (group) {
+                case "resident":
+                case "friend": // alias
+                    value = perms.getResidentPerm(actionType);
+                    break;
+
+                case "ally":
+                case "allies":
+                    value = perms.getAllyPerm(actionType);
+                    break;
+
+                case "outsider":
+                case "outsiders":
+                    value = perms.getOutsiderPerm(actionType);
+                    break;
+
+                default:
+                    return null;
+            }
+
+            return new ElementTag(value);
+        });
     }
 
     public static ObjectTagProcessor<TownTag> tagProcessor = new ObjectTagProcessor<>();
@@ -636,6 +721,112 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         }
         if(mechanism.matches("is_open")){
             town.setOpen(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("is_forsale")){
+            town.setForSale(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("forsale_price")){
+            town.setForSalePrice(mechanism.getValue().asDouble());
+        }
+        if (mechanism.matches("perm")) {
+            ListTag input = mechanism.valueAsType(ListTag.class);
+            if (input.size() != 2) {
+                mechanism.echoError("Invalid perm mech input: expected 2 values: '<group>.<action>|<boolean>'.");
+                return;
+            }
+
+            String spec = input.get(0); // e.g. "resident.build"
+            boolean value = new ElementTag(input.get(1)).asBoolean();
+
+            String[] parts = spec.split("\\.", 2);
+            if (parts.length != 2) {
+                mechanism.echoError("Invalid perm spec '" + spec + "': expected '<group>.<action>'.");
+                return;
+            }
+
+            String group = CoreUtilities.toLowerCase(parts[0]);  // resident / ally / outsider
+            String action = CoreUtilities.toLowerCase(parts[1]); // build / destroy / switch / itemuse
+
+            TownyPermission perms = town.getPermissions();
+
+            try {
+                switch (group) {
+                    case "resident":
+                    case "friend": // optional alias
+                        switch (action) {
+                            case "build":
+                                perms.set("residentbuild", value);
+                                break;
+                            case "destroy":
+                                perms.set("residentdestroy", value);
+                                break;
+                            case "switch":
+                                perms.set("residentswitch", value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("residentitemuse", value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
+                                return;
+                        }
+                        break;
+
+                    case "ally":
+                    case "allies":
+                        switch (action) {
+                            case "build":
+                                perms.set("allybuild", value);
+                                break;
+                            case "destroy":
+                                perms.set("allydestroy", value);
+                                break;
+                            case "switch":
+                                perms.set("allyswitch", value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("allyitemuse", value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
+                                return;
+                        }
+                        break;
+
+                    case "outsider":
+                    case "outsiders":
+                        switch (action) {
+                            case "build":
+                                perms.set("outsiderbuild", value);
+                                break;
+                            case "destroy":
+                                perms.set("outsiderdestroy", value);
+                                break;
+                            case "switch":
+                                perms.set("outsiderswitch", value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("outsideritemuse", value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
+                                return;
+                        }
+                        break;
+
+                    default:
+                        mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
+                        return;
+                }
+
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Failed to set Town perm '" + spec + "': " + ex.getMessage());
+            }
+            return;
         }
     }
 }
