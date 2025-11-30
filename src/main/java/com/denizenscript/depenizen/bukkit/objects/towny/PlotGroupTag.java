@@ -224,7 +224,18 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
          tagProcessor.registerTag(ElementTag.class, "is_forsale", (attribute, object) ->
                  new ElementTag(object.plotGroup.getPrice() != (double) -1.0F));
 
-
+        tagProcessor.registerTag(ElementTag.class,"has_pvp",(attribute,object) -> {
+            return new ElementTag(object.plotGroup.getPermissions().pvp);
+        });
+        tagProcessor.registerTag(ElementTag.class,"has_fire",(attribute,object) -> {
+            return new ElementTag(object.plotGroup.getPermissions().fire);
+        });
+        tagProcessor.registerTag(ElementTag.class,"has_explosions",(attribute,object) -> {
+            return new ElementTag(object.plotGroup.getPermissions().explosion);
+        });
+        tagProcessor.registerTag(ElementTag.class,"has_mobs",(attribute,object) -> {
+            return new ElementTag(object.plotGroup.getPermissions().mobs);
+        });
          // <--[tag]
         // @attribute <PlotGroupTag.perm[<group>.<action>]>
         // @returns ElementTag(Boolean)
@@ -310,6 +321,132 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
 
     @Override
     public void adjust(Mechanism mechanism) {
+        // <--[mechanism]
+        // @object TownBlockTag
+        // @name perm
+        // @input ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets a specific permission on this TownBlock.
+        // Input is a list of: <group.action>|<boolean>
+        // Where <group> = resident/ally/outsider
+        // and <action> = build/destroy/switch/itemuse
+        // -->
+        if (mechanism.matches("perm")) {
+            ListTag input = mechanism.valueAsType(ListTag.class);
+            if (input.size() != 2) {
+                mechanism.echoError("Invalid perm mech input: expected 2 values: '<group>.<action>|<boolean>'.");
+                return;
+            }
+
+            String spec = input.get(0);
+            boolean value = new ElementTag(input.get(1)).asBoolean();
+
+            String[] parts = spec.split("\\.", 2);
+            if (parts.length != 2) {
+                mechanism.echoError("Invalid perm spec '" + spec + "': expected '<group>.<action>'.");
+                return;
+            }
+
+            String group = CoreUtilities.toLowerCase(parts[0]);  // resident / ally / outsider
+            String action = CoreUtilities.toLowerCase(parts[1]); // build / destroy / switch / itemuse
+
+            TownyPermission perms = plotGroup.getPermissions();
+
+            try {
+                switch (group) {
+                    case "resident":
+                    case "friend": // optional alias if you want
+                        switch (action) {
+                            case "build":
+                                perms.set("residentbuild",value);
+                                break;
+                            case "destroy":
+                                perms.set("residentdestroy",value);
+                                break;
+                            case "switch":
+                                perms.set("residentswitch",value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("residentitemuse",value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
+                                return;
+                        }
+                        break;
+
+                    case "ally":
+                    case "allies":
+                        switch (action) {
+                            case "build":
+                                perms.set("allybuild",value);
+                                break;
+                            case "destroy":
+                                perms.set("allydestroy",value);
+                                break;
+                            case "switch":
+                                perms.set("allyswitch",value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("allyitemuse",value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
+                                return;
+                        }
+                        break;
+
+                    case "outsider":
+                    case "outsiders":
+                        switch (action) {
+                            case "build":
+                                perms.set("outsiderbuild",value);
+                                break;
+                            case "destroy":
+                                perms.set("outsiderdestroy",value);
+                                break;
+                            case "switch":
+                                perms.set("outsiderswitch",value);
+                                break;
+                            case "itemuse":
+                            case "item_use":
+                                perms.set("outsideritemuse",value);
+                                break;
+                            default:
+                                mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
+                                return;
+                        }
+                        break;
+
+                    default:
+                        mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
+                        return;
+                }
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Failed to set TownBlock permission '" + spec + "': " + ex.getMessage());
+            }
+            return;
+        }
+        if(mechanism.matches("has_pvp")){
+            TownyPermission perms = plotGroup.getPermissions();
+            perms.set("pvp",mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_firespread")){
+            TownyPermission perms = plotGroup.getPermissions();
+            perms.set("fire",mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_explosions")){
+            TownyPermission perms = plotGroup.getPermissions();
+            perms.set("explosion",mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("has_mobs")) {
+            TownyPermission perms = plotGroup.getPermissions();
+            perms.set("mobs", mechanism.getValue().asBoolean());
+        }
         if(mechanism.matches("add_trusted_resident")){
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
@@ -333,6 +470,28 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
             }
             plotGroup.removeTrustedResident(resident);
+        }
+        // Unsure if this is how plotgroups determine their isForsale value. This needs to be tested
+        // It might work by setting the forsale price to -1?
+        if (mechanism.matches("is_forsale")) {
+            Town town = plotGroup.getTown();
+            if (town == null) {
+                mechanism.echoError("Plot group lacks an owning town.");
+                return;
+            }
+            boolean forSale = mechanism.getValue().asBoolean();
+            TownBlockTypeCache cache = town.getTownBlockTypeCache();
+            for (TownBlock block : plotGroup.getTownBlocks()) {
+                if (forSale) {
+                    cache.addTownBlockOfTypeForSale(block);
+                }
+                else {
+                    cache.removeTownBlockOfTypeForSale(block);
+                }
+            }
+        }
+        if (mechanism.matches("forsale_price")) {
+            plotGroup.setPrice(mechanism.getValue().asDouble());
         }
     }
 }
