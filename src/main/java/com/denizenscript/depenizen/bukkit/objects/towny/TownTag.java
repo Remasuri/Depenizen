@@ -525,6 +525,19 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return output;
         });
 
+        tagProcessor.registerTag(ListTag.class, "list_plotgroups",((attribute, object) -> {
+            ListTag output = new ListTag();
+            if (!object.town.hasPlotGroups()) {
+                //Not sure if return null or empty list is better?
+                return output;
+            }
+            for(PlotGroup group : object.town.getPlotGroups()) {
+                PlotGroupTag plotGroupTag = new PlotGroupTag(group);
+                output.addObject(plotGroupTag);
+            }
+            return output;
+        }));
+
         // <--[tag]
         // @attribute <TownTag.plots>
         // @returns ListTag(ChunkTag)
