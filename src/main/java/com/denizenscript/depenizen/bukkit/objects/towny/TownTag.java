@@ -728,6 +728,30 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         if(mechanism.matches("forsale_price")){
             town.setForSalePrice(mechanism.getValue().asDouble());
         }
+        if(mechanism.matches("add_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            town.addTrustedResident(resident);
+        }
+        if(mechanism.matches("remove_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            town.removeTrustedResident(resident);
+        }
         if (mechanism.matches("perm")) {
             ListTag input = mechanism.valueAsType(ListTag.class);
             if (input.size() != 2) {

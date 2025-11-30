@@ -16,6 +16,7 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.object.*;
 
 import org.bukkit.Bukkit;
@@ -326,10 +327,6 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // Input is a list of: <group.action>|<boolean>
         // Where <group> = resident/ally/outsider
         // and <action> = build/destroy/switch/itemuse
-        //
-        // Examples:
-        // - adjust <[townblock]> perm:resident.build|true
-        // - adjust <[townblock]> perm:outsider.itemuse|false
         // -->
         if (mechanism.matches("perm")) {
             ListTag input = mechanism.valueAsType(ListTag.class);
@@ -338,7 +335,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
 
-            String spec = input.get(0); // e.g. "resident.build"
+            String spec = input.get(0);
             boolean value = new ElementTag(input.get(1)).asBoolean();
 
             String[] parts = spec.split("\\.", 2);
@@ -353,8 +350,6 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             TownyPermission perms = townBlock.getPermissions();
 
             try {
-                // NOTE: You'll need to adapt these calls to whatever your Towny version exposes
-                // in TownyPermission. These are illustrative.
                 switch (group) {
                     case "resident":
                     case "friend": // optional alias if you want
@@ -447,6 +442,30 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         if(mechanism.matches("has_mobs")) {
             TownyPermission perms = townBlock.getPermissions();
             perms.set("mobs", mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("add_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            townBlock.addTrustedResident(resident);
+        }
+        if(mechanism.matches("remove_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            townBlock.removeTrustedResident(resident);
         }
         if(mechanism.matches("is_forsale")){
             Town town = townBlock.getTownOrNull();

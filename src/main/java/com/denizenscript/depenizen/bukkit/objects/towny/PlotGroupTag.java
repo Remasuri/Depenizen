@@ -1,6 +1,7 @@
 package com.denizenscript.depenizen.bukkit.objects.towny;
 
 import com.denizenscript.denizen.objects.LocationTag;
+import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
@@ -20,11 +21,8 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyUniverse;
-import com.palmergames.bukkit.towny.object.PlotGroup;
-import com.palmergames.bukkit.towny.object.Town;
-import com.palmergames.bukkit.towny.object.TownBlock;
+import com.palmergames.bukkit.towny.object.*;
 
-import com.palmergames.bukkit.towny.object.TownyPermission;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
@@ -225,7 +223,9 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // -->
          tagProcessor.registerTag(ElementTag.class, "is_forsale", (attribute, object) ->
                  new ElementTag(object.plotGroup.getPrice() != (double) -1.0F));
-        // <--[tag]
+
+
+         // <--[tag]
         // @attribute <PlotGroupTag.perm[<group>.<action>]>
         // @returns ElementTag(Boolean)
         // @description
@@ -310,6 +310,29 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
 
     @Override
     public void adjust(Mechanism mechanism) {
-
+        if(mechanism.matches("add_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            plotGroup.addTrustedResident(resident);
+        }
+        if(mechanism.matches("remove_trusted_resident")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
+            if(resident == null){
+                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            }
+            plotGroup.removeTrustedResident(resident);
+        }
     }
 }
