@@ -211,6 +211,9 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(TownTag.class, "town", (attribute, object) -> {
             return new TownTag(object.townBlock.getTownOrNull());
         });
+        tagProcessor.registerTag(PlotGroupTag.class,"plotgroup",((attribute, object) -> {
+            return new PlotGroupTag(object.townBlock.getPlotObjectGroup());
+        }));
         tagProcessor.registerTag(ElementTag.class,"is_forsale",((attribute, object) -> {
             return new ElementTag(object.townBlock.isForSale());
         }));

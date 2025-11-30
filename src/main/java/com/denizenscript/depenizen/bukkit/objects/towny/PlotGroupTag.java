@@ -26,6 +26,7 @@ import com.palmergames.bukkit.towny.object.*;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
+import java.util.ArrayList;
 import java.util.UUID;
 
 public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
@@ -57,7 +58,6 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         if (string == null) return null;
 
         string = CoreUtilities.toLowerCase(string);
-
         if (string.startsWith("plotgroup@")) {
             string = string.substring("plotgroup@".length());
         }
@@ -90,7 +90,15 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
     public PlotGroupTag(PlotGroup plotGroup) {
         this.plotGroup = plotGroup;
     }
+    public static PlotGroupTag createNew(Town town, String name) {
+        UUID id = UUID.randomUUID();
+        PlotGroup group = new PlotGroup(id, name, town);
+        group.setTown(town);
+        TownyUniverse.getInstance().registerGroup(group);
 
+        group.save();
+        return new PlotGroupTag(group);
+    }
     public PlotGroup getPlotGroup() {
         return plotGroup;
     }
@@ -492,6 +500,49 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         }
         if (mechanism.matches("forsale_price")) {
             plotGroup.setPrice(mechanism.getValue().asDouble());
+        }
+
+        if(mechanism.matches("townblocks")) {
+            ListTag input = mechanism.valueAsType(ListTag.class);
+            java.util.List<TownBlockTag> townBlockTags = input.filter(TownBlockTag.class, mechanism.context);
+            if (townBlockTags.isEmpty()) {
+                mechanism.echoError("townblocks mechanism requires a list of TownBlockTags.");
+                return;
+            }
+            java.util.Set<TownBlock> newBlocks = new java.util.HashSet<>();
+            for (TownBlockTag tbt : townBlockTags) {
+                TownBlock block = tbt.getTownBlock();
+                if (block == null) {
+                    mechanism.echoError("Found null townblock in townblocks list: " + tbt.identifySimple());
+                    continue;
+                }
+                newBlocks.add(block);
+            }
+            java.util.Set<TownBlock> oldBlocks = new java.util.HashSet<>(plotGroup.getTownBlocks());
+            for (TownBlock oldBlock : oldBlocks) {
+                if (!newBlocks.contains(oldBlock)) {
+                    // Remove this group from the block
+                    try {
+                        oldBlock.removePlotObjectGroup();
+                    }
+                    catch (Exception ex) {
+                        mechanism.echoError("Error removing plotgroup from townblock "
+                                + oldBlock.getWorldCoord() + ": " + ex.getMessage());
+                    }
+                }
+            }
+            for (TownBlock newBlock : newBlocks) {
+                if (!oldBlocks.contains(newBlock)) {
+                    try {
+                        newBlock.setPlotObjectGroup(plotGroup);
+                    }
+                    catch (Exception ex) {
+                        mechanism.echoError("Error adding plotgroup to townblock "
+                                + newBlock.getWorldCoord() + ": " + ex.getMessage());
+                    }
+                }
+            }
+            plotGroup.setTownblocks(new ArrayList<>(newBlocks));
         }
     }
 }

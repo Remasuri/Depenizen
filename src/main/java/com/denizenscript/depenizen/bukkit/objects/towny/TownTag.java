@@ -852,5 +852,8 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
             return;
         }
+        if(mechanism.matches("spawn")){
+            town.setSpawn(mechanism.valueAsType(LocationTag.class));
+        }
     }
 }
