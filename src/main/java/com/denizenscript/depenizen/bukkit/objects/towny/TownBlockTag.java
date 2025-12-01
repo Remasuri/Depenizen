@@ -291,13 +291,13 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         }));
 
         // <--[tag]
-        // @attribute <TownBlockTag.plot_type>
+        // @attribute <TownBlockTag.towny_type>
         // @returns ElementTag
         // @plugin Depenizen, Towny
         // @description
         // Returns the Towny plot type name of this townblock.
         // -->
-        tagProcessor.registerTag(ElementTag.class,"plot_type",((attribute, object) -> {
+        tagProcessor.registerTag(ElementTag.class,"towny_type",((attribute, object) -> {
             return new ElementTag(object.townBlock.getType().getName());
         }));
 
@@ -623,16 +623,16 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         }
         // <--[mechanism]
         // @object TownBlockTag
-        // @name plot_type
+        // @name towny_type
         // @input ElementTag
         // @plugin Depenizen, Towny
         // @description
         // Sets the Towny plot type for this townblock.
         // Common values include: residential, shop, arena, embassy, wilds, inn, jail, farm, bank.
         // @tags
-        // <TownBlockTag.plot_type>
+        // <TownBlockTag.towny_type>
         // -->
-        if(mechanism.matches("plot_type")){
+        if(mechanism.matches("towny_type")){
             String typeString = mechanism.getValue().asString();
             String lower = typeString.toLowerCase();
             TownBlockType type = switch (typeString) {
