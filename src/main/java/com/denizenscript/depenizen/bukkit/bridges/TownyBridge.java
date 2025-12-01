@@ -55,6 +55,8 @@ public class TownyBridge extends Bridge {
         ScriptEvent.registerScriptEvent(TownLevelIncreasedScriptEvent.class);
         ScriptEvent.registerScriptEvent(PlotGroupCreatedScriptEvent.class);
         ScriptEvent.registerScriptEvent(TownyNewDayScriptEvent.class);
+        ScriptEvent.registerScriptEvent(PlayerClaimsTownPlotScriptEvent.class);
+        ScriptEvent.registerScriptEvent(PlayerUnclaimsTownPlotScriptEvent.class);
         TagManager.registerTagHandler(new TagRunnable.RootForm() {
             @Override
             public void run(ReplaceableTagEvent event) {
