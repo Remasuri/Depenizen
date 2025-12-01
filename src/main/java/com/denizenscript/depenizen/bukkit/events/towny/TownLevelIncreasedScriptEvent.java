@@ -11,6 +11,21 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
 public class TownLevelIncreasedScriptEvent extends BukkitScriptEvent implements Listener {
+    // <--[event]
+    // @Events
+    // towny town level increased
+    //
+    // @Triggers after all checks are complete and a Towny town levels up.
+    //
+    // @Context
+    // <context.town> Returns the town that changed.
+    // <context.town_level> Returns the new town level.
+    //
+    // @Plugin Depenizen, Towny
+    //
+    // @Group Depenizen
+    //
+    // -->
     public TownLevelIncreasedScriptEvent() {
         registerCouldMatcher("towny town level increased");
     }

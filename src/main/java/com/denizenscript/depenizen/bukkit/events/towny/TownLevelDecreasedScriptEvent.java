@@ -13,6 +13,21 @@ import org.bukkit.event.Listener;
 
 //TODO: Figure out if increase & decrease can be combined to single "changed" event. Learn more java syntax for this
 public class TownLevelDecreasedScriptEvent extends BukkitScriptEvent implements Listener {
+    // <--[event]
+    // @Events
+    // towny town level decreased
+    //
+    // @Triggers after all checks are complete and a Towny town levels down.
+    //
+    // @Context
+    // <context.town> Returns the town that changed.
+    // <context.town_level> Returns the new town level.
+    //
+    // @Plugin Depenizen, Towny
+    //
+    // @Group Depenizen
+    //
+    // -->
     public TownLevelDecreasedScriptEvent() {
         registerCouldMatcher("towny town level decreased");
     }

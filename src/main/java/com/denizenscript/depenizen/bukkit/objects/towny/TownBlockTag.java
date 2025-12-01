@@ -251,7 +251,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // -->
         tagProcessor.registerTag(LocationTag.class,"world_location",((attribute, object) -> {
             WorldCoord blockLocation = object.townBlock.getWorldCoord();
-            return new LocationTag(blockLocation.getBukkitWorld(), blockLocation.getX(), 600f, blockLocation.getZ());
+            return new LocationTag(blockLocation.getLowerMostCornerLocation());
         }));
 
         // <--[tag]
