@@ -6,6 +6,7 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.scripts.commands.generator.*;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.TownyUniverse;
@@ -68,6 +69,7 @@ public class PlotGroupCommand extends AbstractCommand  {
                 universe.registerGroup(plotGroup);
                 dataSource.saveTown(town.getTown());
                 dataSource.savePlotGroup(plotGroup);
+                scriptEntry.saveObject("created_plotgroup",new PlotGroupTag(plotGroup));
                 scriptEntry.setFinished(true);
             }
             case DELETE ->  {
