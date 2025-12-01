@@ -25,9 +25,9 @@ import com.palmergames.bukkit.towny.object.*;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.UUID;
+import java.util.*;
 
 public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
 
@@ -228,7 +228,25 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_forsale", (attribute, object) ->
                 new ElementTag(object.plotGroup.getPrice() != (double) -1.0F));
-
+        // <--[tag]
+        // @attribute <PlotGroupTag.resident>
+        // @returns PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the resident that owns this plot group, or null if the plot group is town-owned
+        // or the resident is not online.
+        // -->
+        tagProcessor.registerTag(PlayerTag.class, "resident", ((attribute, object) -> {
+            Resident resident = object.plotGroup.getResident();
+            if (resident == null) {
+                return null;
+            }
+            UUID uuid = resident.getUUID();
+            if (uuid == null) {
+                return null;
+            }
+            return new PlayerTag(Bukkit.getOfflinePlayer(uuid));
+        }));
         // <--[tag]
         // @attribute <PlotGroupTag.has_pvp>
         // @returns ElementTag(Boolean)
@@ -668,7 +686,34 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             plotGroup.setPrice(mechanism.getValue().asDouble());
             dataSource.savePlotGroup(plotGroup);
         }
+        // <--[mechanism]
+        // @object PlotGroupTag
+        // @name resident
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the resident that owns this plot group.
+        // Input may also be the text 'none' to clear the resident and make
+        // the plot group town-owned instead.
+        // @tags
+        // <PlotGroupTag.resident>
+        // -->
+        if(mechanism.matches("resident")) {
+            if (mechanism.hasValue() && mechanism.getValue().asString().equalsIgnoreCase("none")) {
+                plotGroup.setResident(null); // town-owned
+                dataSource.savePlotGroup(plotGroup);
+                return;
+            }
 
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Resident mechanism requires a valid PlayerTag or 'none'.");
+                return;
+            }
+            Resident resident = universe.getResident(player.getUUID());
+            plotGroup.setResident(resident);
+            dataSource.savePlotGroup(plotGroup);
+        }
         // <--[mechanism]
         // @object PlotGroupTag
         // @name townblocks
@@ -681,12 +726,12 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // -->
         if(mechanism.matches("townblocks")) {
             ListTag input = mechanism.valueAsType(ListTag.class);
-            java.util.List<TownBlockTag> townBlockTags = input.filter(TownBlockTag.class, mechanism.context);
+            List<TownBlockTag> townBlockTags = input.filter(TownBlockTag.class, mechanism.context);
             if (townBlockTags.isEmpty()) {
                 mechanism.echoError("townblocks mechanism requires a list of TownBlockTags.");
                 return;
             }
-            java.util.Set<TownBlock> newBlocks = new java.util.HashSet<>();
+            Set<TownBlock> newBlocks = new HashSet<>();
             for (TownBlockTag tbt : townBlockTags) {
                 TownBlock block = tbt.getTownBlock();
                 if (block == null) {
@@ -695,7 +740,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 }
                 newBlocks.add(block);
             }
-            java.util.Set<TownBlock> oldBlocks = new java.util.HashSet<>(plotGroup.getTownBlocks());
+            Set<TownBlock> oldBlocks = new HashSet<>(plotGroup.getTownBlocks());
             for (TownBlock oldBlock : oldBlocks) {
                 if (!newBlocks.contains(oldBlock)) {
                     // Remove this group from the block

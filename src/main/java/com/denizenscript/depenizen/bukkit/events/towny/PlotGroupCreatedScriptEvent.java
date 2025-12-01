@@ -2,7 +2,9 @@ package com.denizenscript.depenizen.bukkit.events.towny;
 
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.event.NewTownEvent;
@@ -32,12 +34,13 @@ public class PlotGroupCreatedScriptEvent extends BukkitScriptEvent implements Li
     }
     public PlotGroupCreatedEvent event;
     @Override
+    public ScriptEntryData getScriptEntryData() {
+        return new BukkitScriptEntryData(event.getPlayer());
+    }
+    @Override
     public ObjectTag getContext(String name) {
         if (name.equals("town")) {
             return new TownTag(event.getTownBlock().getTownOrNull());
-        }
-        if (name.equals("player")){
-            return  new PlayerTag(event.getPlayer());
         }
         if(name.equals("plotgroup")){
             return new PlotGroupTag(event.getPlotGroup());

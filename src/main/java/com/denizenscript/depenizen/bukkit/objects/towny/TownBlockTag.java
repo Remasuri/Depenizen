@@ -24,6 +24,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 
+import java.util.UUID;
+
 public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
 
     // <--[ObjectType]
@@ -253,7 +255,25 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             WorldCoord blockLocation = object.townBlock.getWorldCoord();
             return new LocationTag(blockLocation.getLowerMostCornerLocation());
         }));
-
+        // <--[tag]
+        // @attribute <TownBlockTag.resident>
+        // @returns PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the resident that owns this plot, or null if the plot is town-owned
+        // or the resident is not online.
+        // -->
+        tagProcessor.registerTag(PlayerTag.class, "resident", ((attribute, object) -> {
+            Resident resident = object.townBlock.getResidentOrNull();
+            if (resident == null) {
+                return null;
+            }
+            UUID uuid = resident.getUUID();
+            if (uuid == null) {
+                return null;
+            }
+            return new PlayerTag(Bukkit.getOfflinePlayer(uuid));
+        }));
         // <--[tag]
         // @attribute <TownBlockTag.trusted_residents>
         // @returns ListTag(PlayerTag)
@@ -714,6 +734,34 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                 town.getTownBlockTypeCache().addTownBlockOfTypeForSale(townBlock);
             else
                 town.getTownBlockTypeCache().removeTownBlockOfTypeForSale(townBlock);
+            dataSource.saveTownBlock(townBlock);
+        }
+        // <--[mechanism]
+        // @object TownBlockTag
+        // @name resident
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the resident that owns this plot.
+        // Input may also be the text 'none' to clear the resident and make
+        // the plot town-owned instead.
+        // @tags
+        // <TownBlockTag.resident>
+        // -->
+        if(mechanism.matches("resident")) {
+            if (mechanism.hasValue() && mechanism.getValue().asString().equalsIgnoreCase("none")) {
+                townBlock.setResident(null); // town-owned
+                dataSource.saveTownBlock(townBlock);
+                return;
+            }
+
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("Resident mechanism requires a valid PlayerTag or 'none'.");
+                return;
+            }
+            Resident resident = universe.getResident(player.getUUID());
+            townBlock.setResident(resident);
             dataSource.saveTownBlock(townBlock);
         }
         // <--[mechanism]
