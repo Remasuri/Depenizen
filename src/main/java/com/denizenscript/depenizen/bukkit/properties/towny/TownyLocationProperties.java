@@ -135,12 +135,39 @@ public class TownyLocationProperties {
             return new ElementTag(TownyAPI.getInstance().isWilderness(location));
         });
 
-        LocationTag.tagProcessor.registerTag(TownBlockTag.class, "townblock",(attribute,location) -> {
-            return new TownBlockTag(TownyAPI.getInstance().getTownBlock(location));
+        // <--[tag]
+        // @attribute <LocationTag.townblock>
+        // @returns TownBlockTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the Towny TownBlock at this location, if any.
+        // This can be used to access additional Towny data such as
+        // the plot owner, plot type, permissions, plot group, etc.
+        // -->
+        LocationTag.tagProcessor.registerTag(TownBlockTag.class, "townblock", (attribute, location) -> {
+            TownBlock tb = TownyAPI.getInstance().getTownBlock(location);
+            if (tb == null) {
+                return null;
+            }
+            return new TownBlockTag(tb);
         });
-        LocationTag.tagProcessor.registerTag(PlotGroupTag.class,"plotgroup",((attribute, location) -> {
-            return new PlotGroupTag(TownyAPI.getInstance().getTownBlock(location).getPlotObjectGroup());
-        }));
+
+        // <--[tag]
+        // @attribute <LocationTag.plotgroup>
+        // @returns PlotGroupTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the Towny PlotGroup at this location, if the TownBlock
+        // belongs to one. PlotGroups are used in Towny to link multiple plots
+        // together for shared settings such as permissions or ownership.
+        // -->
+        LocationTag.tagProcessor.registerTag(PlotGroupTag.class, "plotgroup", (attribute, location) -> {
+            TownBlock block = TownyAPI.getInstance().getTownBlock(location);
+            if (block == null || block.getPlotObjectGroup() == null) {
+                return null;
+            }
+            return new PlotGroupTag(block.getPlotObjectGroup());
+        });
     }
 
     public static PlayerTag getResidentAtLocation(LocationTag location) throws NotRegisteredException {
