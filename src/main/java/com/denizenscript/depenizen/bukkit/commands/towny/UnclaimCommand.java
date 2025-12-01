@@ -29,14 +29,14 @@ public class UnclaimCommand extends AbstractCommand {
 
     public UnclaimCommand() {
         setName("unclaim");
-        setSyntax("unclaim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>)");
-        setRequiredArguments(2, 4);
+        setSyntax("unclaim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>) (outpost:<true/false>)");
+        setRequiredArguments(2, 5);
         autoCompile();
     }
 
     // <--[command]
     // @Name Unclaim
-    // @Syntax unclaim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>)
+    // @Syntax unclaim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>) (outpost:<true/false>)
     // @Group Depenizen
     // @Plugin Depenizen, Towny
     // @Required 2
@@ -92,7 +92,8 @@ public class UnclaimCommand extends AbstractCommand {
                                    @ArgName("action") Action action,
                                    @ArgName("selection") @ArgPrefixed @ArgDefaultNull @ArgSubType(LocationTag.class) List<LocationTag> selection,
                                    @ArgName("admin") @ArgPrefixed @ArgDefaultNull boolean admin,
-                                   @ArgName("target") @ArgPrefixed @ArgDefaultNull PlayerTag target) {
+                                   @ArgName("target") @ArgPrefixed @ArgDefaultNull PlayerTag target,
+                                   @ArgName("outpost") @ArgPrefixed @ArgDefaultNull boolean outpost) {
 
         if (selection == null || selection.isEmpty()) {
             scriptEntry.setFinished(true);
@@ -158,7 +159,7 @@ public class UnclaimCommand extends AbstractCommand {
                 }
 
                 // forced = admin (so admin can unclaim other towns' blocks if desired)
-                runnable = new TownClaim(towny, player, town, coords, false, false, admin);
+                runnable = new TownClaim(towny, player, town, coords, outpost, false, admin);
             }
             case GROUP -> {
                 // Group unclaim: resolve the PlotGroup from the first coord and unclaim all its plots

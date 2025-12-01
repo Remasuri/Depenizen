@@ -27,14 +27,14 @@ public class ClaimCommand extends AbstractCommand {
 
     public ClaimCommand() {
         setName("claim");
-        setSyntax("claim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>)");
-        setRequiredArguments(2, 4);
+        setSyntax("claim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>) (outpost:<true/false>)");
+        setRequiredArguments(2, 5);
         autoCompile();
     }
 
     // <--[command]
     // @Name Claim
-    // @Syntax claim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>)
+    // @Syntax claim [town/plot/group] (selection:<list[<location>]>) (admin:<true/false>) (target:<player>) (outpost:<true/false>)
     // @Group Depenizen
     // @Plugin Depenizen, Towny
     // @Required 2
@@ -86,7 +86,8 @@ public class ClaimCommand extends AbstractCommand {
                                    @ArgName("action") Action action,
                                    @ArgName("selection") @ArgPrefixed @ArgDefaultNull @ArgSubType(LocationTag.class) List<LocationTag> selection,
                                    @ArgName("admin") @ArgPrefixed @ArgDefaultNull boolean admin,
-                                   @ArgName("target") @ArgPrefixed @ArgDefaultNull PlayerTag target) {
+                                   @ArgName("target") @ArgPrefixed @ArgDefaultNull PlayerTag target,
+                                   @ArgName("outpost") @ArgPrefixed @ArgDefaultNull boolean outpost) {
 
         if (selection == null || selection.isEmpty()) {
             scriptEntry.setFinished(true);
@@ -140,7 +141,7 @@ public class ClaimCommand extends AbstractCommand {
                     for (WorldCoord coord : coords) {
                         try {
                             // outpost = false, newTown = false
-                            api.testTownClaimOrThrow(town, coord, false, false);
+                            api.testTownClaimOrThrow(town, coord, outpost, false);
                         }
                         catch (TownyException ex) {
                             scriptEntry.setFinished(true);
