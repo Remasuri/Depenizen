@@ -712,30 +712,6 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             townBlock.removeTrustedResident(resident);
             dataSource.saveTownBlock(townBlock);
         }
-        //This might get removed and forsale gets strictly driven by price
-        // <--[mechanism]
-        // @object TownBlockTag
-        // @name is_forsale
-        // @input ElementTag(Boolean)
-        // @plugin Depenizen, Towny
-        // @description
-        // Sets whether this townblock is considered for sale, updating its sale cache in the owning town.
-        // @tags
-        // <TownBlockTag.is_forsale>
-        // -->
-        if(mechanism.matches("is_forsale")){
-            Town town = townBlock.getTownOrNull();
-            if (town == null){
-                mechanism.echoError("No town registered for this townblock");
-                return;
-            }
-            boolean for_sale = mechanism.getValue().asBoolean();
-            if(for_sale)
-                town.getTownBlockTypeCache().addTownBlockOfTypeForSale(townBlock);
-            else
-                town.getTownBlockTypeCache().removeTownBlockOfTypeForSale(townBlock);
-            dataSource.saveTownBlock(townBlock);
-        }
         // <--[mechanism]
         // @object TownBlockTag
         // @name resident

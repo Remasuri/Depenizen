@@ -227,7 +227,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // Returns whether this plot group is currently for sale.
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_forsale", (attribute, object) ->
-                new ElementTag(object.plotGroup.getPrice() != (double) -1.0F));
+                new ElementTag(object.plotGroup.getPrice() >= (double)0.0F));
         // <--[tag]
         // @attribute <PlotGroupTag.resident>
         // @returns PlayerTag
@@ -641,36 +641,6 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             }
             plotGroup.removeTrustedResident(resident);
             dataSource.savePlotGroup(plotGroup);
-        }
-        // Unsure if this is how plotgroups determine their isForsale value. This needs to be tested
-        // It might work by setting the forsale price to -1?
-        // <--[mechanism]
-        // @object PlotGroupTag
-        // @name is_forsale
-        // @input ElementTag(Boolean)
-        // @plugin Depenizen, Towny
-        // @description
-        // Sets whether this plot group is considered for sale, updating all townblocks in the group.
-        // @tags
-        // <PlotGroupTag.is_forsale>
-        // -->
-        if (mechanism.matches("is_forsale")) {
-            Town town = plotGroup.getTown();
-            if (town == null) {
-                mechanism.echoError("Plot group lacks an owning town.");
-                return;
-            }
-            boolean forSale = mechanism.getValue().asBoolean();
-            TownBlockTypeCache cache = town.getTownBlockTypeCache();
-            for (TownBlock block : plotGroup.getTownBlocks()) {
-                if (forSale) {
-                    cache.addTownBlockOfTypeForSale(block);
-                }
-                else {
-                    cache.removeTownBlockOfTypeForSale(block);
-                }
-                dataSource.saveTownBlock(block);
-            }
         }
         // <--[mechanism]
         // @object PlotGroupTag
