@@ -3,7 +3,9 @@ package com.denizenscript.depenizen.bukkit.bridges;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.depenizen.bukkit.commands.noteblockapi.NBSCommand;
+import com.denizenscript.depenizen.bukkit.commands.towny.ClaimCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.PlotGroupCommand;
+import com.denizenscript.depenizen.bukkit.commands.towny.UnclaimCommand;
 import com.denizenscript.depenizen.bukkit.events.towny.*;
 import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
@@ -70,6 +72,8 @@ public class TownyBridge extends Bridge {
             }
         }, "nation");
         DenizenCore.commandRegistry.registerCommand(PlotGroupCommand.class);
+        DenizenCore.commandRegistry.registerCommand(ClaimCommand.class);
+        DenizenCore.commandRegistry.registerCommand(UnclaimCommand.class);
     }
 
     public void townyTagEvent(ReplaceableTagEvent event) {
