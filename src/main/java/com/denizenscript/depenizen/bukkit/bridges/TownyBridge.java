@@ -78,6 +78,18 @@ public class TownyBridge extends Bridge {
                 nationTagEvent(event);
             }
         }, "nation");
+        TagManager.registerTagHandler(new TagRunnable.RootForm() {
+            @Override
+            public void run(ReplaceableTagEvent event) {
+                townBlockTagEvent(event);
+            }
+        }, "townblock");
+        TagManager.registerTagHandler(new TagRunnable.RootForm() {
+            @Override
+            public void run(ReplaceableTagEvent event) {
+                plotGroupTagEvent(event);
+            }
+        }, "plotgroup");
         DenizenCore.commandRegistry.registerCommand(PlotGroupCommand.class);
         DenizenCore.commandRegistry.registerCommand(ClaimCommand.class);
         DenizenCore.commandRegistry.registerCommand(UnclaimCommand.class);
@@ -121,7 +133,7 @@ public class TownyBridge extends Bridge {
         // as configured by Towny's 'town_block_size' setting.
         // This is the grid size used to calculate Towny coordinates.
         // -->
-        if (attribute.startsWith("townBlockSize")) {
+        if (attribute.startsWith("town_block_size")) {
             ElementTag size = new ElementTag(TownySettings.getTownBlockSize());
             event.setReplacedObject(size.getObjectAttribute(attribute.fulfill(1)));
             return;
@@ -223,6 +235,75 @@ public class TownyBridge extends Bridge {
         }
     }
 
+    public void townBlockTagEvent(ReplaceableTagEvent event) {
+        Attribute attribute = event.getAttributes();
+
+        // <--[tag]
+        // @attribute <townblock[<id>]>
+        // @returns TownBlockTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the TownBlockTag for the given identifier.
+        //
+        // The identifier can be:
+        // - The standard TownBlock ID: "world;x;z"
+        // - A list-style value: "world|x|z" (for example from <location.towny_grid_location>)
+        //
+        // Examples:
+        // - <townblock[world;12;34]>
+        // - <townblock[<player.location.towny_grid_location>]>
+        // -->
+        if (attribute.hasParam()) {
+            TownBlockTag townblock;
+            if (TownBlockTag.matches(attribute.getParam())) {
+                townblock = attribute.paramAsType(TownBlockTag.class);
+            }
+            else {
+                attribute.echoError("Could not match '" + attribute.getParam() + "' to a valid townblock!");
+                return;
+            }
+            if (townblock != null) {
+                event.setReplacedObject(townblock.getObjectAttribute(attribute.fulfill(1)));
+            }
+            else {
+                attribute.echoError("Unknown townblock '" + attribute.getParam() + "' for townblock[] tag.");
+            }
+        }
+    }
+    public void plotGroupTagEvent(ReplaceableTagEvent event) {
+        Attribute attribute = event.getAttributes();
+
+        // <--[tag]
+        // @attribute <plotgroup[<id>]>
+        // @returns PlotGroupTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the PlotGroupTag by the given identifier.
+        //
+        // The identifier is usually the plotgroup UUID, for example:
+        // - <plotgroup[123e4567-e89b-12d3-a456-426614174000]>
+        //
+        // It uses PlotGroupTag.matches/valueOf internally, so any format those
+        // accept will work here.
+        // -->
+        if (attribute.hasParam()) {
+            PlotGroupTag group;
+            if (PlotGroupTag.matches(attribute.getParam())) {
+                group = attribute.paramAsType(PlotGroupTag.class);
+            }
+            else {
+                attribute.echoError("Could not match '" + attribute.getParam() + "' to a valid plotgroup!");
+                return;
+            }
+
+            if (group != null) {
+                event.setReplacedObject(group.getObjectAttribute(attribute.fulfill(1)));
+            }
+            else {
+                attribute.echoError("Unknown plotgroup '" + attribute.getParam() + "' for plotgroup[] tag.");
+            }
+        }
+    }
     public void nationTagEvent(ReplaceableTagEvent event) {
         Attribute attribute = event.getAttributes();
 
