@@ -410,7 +410,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
 
-            String spec = input.get(0);
+            String spec = input.get(0); // "<group>.<action>"
             boolean value = new ElementTag(input.get(1)).asBoolean();
 
             String[] parts = spec.split("\\.", 2);
@@ -427,82 +427,101 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("This PlotGroup has no permissions object.");
                 return;
             }
+
+            // Map group+action to TownyPermission key
+            String key;
+            switch (group) {
+                case "resident":
+                case "friend": // alias
+                    switch (action) {
+                        case "build":
+                            key = "residentbuild";
+                            break;
+                        case "destroy":
+                            key = "residentdestroy";
+                            break;
+                        case "switch":
+                            key = "residentswitch";
+                            break;
+                        case "itemuse":
+                        case "item_use":
+                            key = "residentitemuse";
+                            break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
+                            return;
+                    }
+                    break;
+
+                case "ally":
+                case "allies":
+                    switch (action) {
+                        case "build":
+                            key = "allybuild";
+                            break;
+                        case "destroy":
+                            key = "allydestroy";
+                            break;
+                        case "switch":
+                            key = "allyswitch";
+                            break;
+                        case "itemuse":
+                        case "item_use":
+                            key = "allyitemuse";
+                            break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
+                            return;
+                    }
+                    break;
+
+                case "outsider":
+                case "outsiders":
+                    switch (action) {
+                        case "build":
+                            key = "outsiderbuild";
+                            break;
+                        case "destroy":
+                            key = "outsiderdestroy";
+                            break;
+                        case "switch":
+                            key = "outsiderswitch";
+                            break;
+                        case "itemuse":
+                        case "item_use":
+                            key = "outsideritemuse";
+                            break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
+                            return;
+                    }
+                    break;
+
+                default:
+                    mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
+                    return;
+            }
+
             try {
-                switch (group) {
-                    case "resident":
-                    case "friend": // optional alias if you want
-                        switch (action) {
-                            case "build":
-                                perms.set("residentbuild",value);
-                                break;
-                            case "destroy":
-                                perms.set("residentdestroy",value);
-                                break;
-                            case "switch":
-                                perms.set("residentswitch",value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("residentitemuse",value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
-                                return;
-                        }
-                        break;
-
-                    case "ally":
-                    case "allies":
-                        switch (action) {
-                            case "build":
-                                perms.set("allybuild",value);
-                                break;
-                            case "destroy":
-                                perms.set("allydestroy",value);
-                                break;
-                            case "switch":
-                                perms.set("allyswitch",value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("allyitemuse",value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
-                                return;
-                        }
-                        break;
-
-                    case "outsider":
-                    case "outsiders":
-                        switch (action) {
-                            case "build":
-                                perms.set("outsiderbuild",value);
-                                break;
-                            case "destroy":
-                                perms.set("outsiderdestroy",value);
-                                break;
-                            case "switch":
-                                perms.set("outsiderswitch",value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("outsideritemuse",value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
-                                return;
-                        }
-                        break;
-
-                    default:
-                        mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
-                        return;
-                }
+                // 1) Set on the PlotGroup permissions object itself
+                perms.set(key, value);
                 dataSource.savePlotGroup(plotGroup);
+
+                // 2) Mimic '/plot group set perm' => apply to all TownBlocks in this group
+                for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                    if (townBlock == null) {
+                        continue;
+                    }
+                    TownyPermission blockPerms = townBlock.getPermissions();
+                    if (blockPerms == null) {
+                        continue;
+                    }
+                    blockPerms.set(key, value);
+                    dataSource.saveTownBlock(townBlock);
+                }
             }
             catch (Exception ex) {
-                mechanism.echoError("Failed to set TownBlock permission '" + spec + "': " + ex.getMessage());
+                mechanism.echoError("Failed to set PlotGroup permission '" + spec + "': " + ex.getMessage());
             }
             return;
         }
@@ -516,9 +535,20 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <PlotGroupTag.has_pvp>
         // -->
-        if(mechanism.matches("has_pvp")){
-            TownyPermission perms = plotGroup.getPermissions();
-            perms.set("pvp",mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_pvp")) {
+            boolean value = mechanism.getValue().asBoolean();
+
+            // Update the plot group's own permissions (so the group object stays in sync)
+            TownyPermission groupPerms = plotGroup.getPermissions();
+            groupPerms.set("pvp", value);
+
+            // Apply to *all* townblocks in this plotgroup, like /plot group toggle pvp
+            for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                TownyPermission blockPerms = townBlock.getPermissions();
+                blockPerms.set("pvp", value);
+                dataSource.saveTownBlock(townBlock);
+            }
+
             dataSource.savePlotGroup(plotGroup);
         }
         // <--[mechanism]
@@ -532,9 +562,16 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <PlotGroupTag.has_fire>
         // -->
-        if(mechanism.matches("has_firespread")){
-            TownyPermission perms = plotGroup.getPermissions();
-            perms.set("fire",mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_firespread")) {
+            boolean value = mechanism.getValue().asBoolean();
+            TownyPermission groupPerms = plotGroup.getPermissions();
+            groupPerms.set("fire", value);
+
+            for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                TownyPermission blockPerms = townBlock.getPermissions();
+                blockPerms.set("fire", value);
+                dataSource.saveTownBlock(townBlock);
+            }
             dataSource.savePlotGroup(plotGroup);
         }
         // <--[mechanism]
@@ -547,9 +584,16 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <PlotGroupTag.has_explosions>
         // -->
-        if(mechanism.matches("has_explosions")){
-            TownyPermission perms = plotGroup.getPermissions();
-            perms.set("explosion",mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_explosions")) {
+            boolean value = mechanism.getValue().asBoolean();
+            TownyPermission groupPerms = plotGroup.getPermissions();
+            groupPerms.set("explosion", value);
+
+            for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                TownyPermission blockPerms = townBlock.getPermissions();
+                blockPerms.set("explosion", value);
+                dataSource.saveTownBlock(townBlock);
+            }
             dataSource.savePlotGroup(plotGroup);
         }
         // <--[mechanism]
@@ -562,9 +606,16 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <PlotGroupTag.has_mobs>
         // -->
-        if(mechanism.matches("has_mobs")) {
-            TownyPermission perms = plotGroup.getPermissions();
-            perms.set("mobs", mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_mobs")) {
+            boolean value = mechanism.getValue().asBoolean();
+            TownyPermission groupPerms = plotGroup.getPermissions();
+            groupPerms.set("mobs", value);
+
+            for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                TownyPermission blockPerms = townBlock.getPermissions();
+                blockPerms.set("mobs", value);
+                dataSource.saveTownBlock(townBlock);
+            }
             dataSource.savePlotGroup(plotGroup);
         }
         // <--[mechanism]
@@ -581,18 +632,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         if(mechanism.matches("towny_type")){
             String typeString = mechanism.getValue().asString();
             String lower = typeString.toLowerCase();
-            TownBlockType type = switch (typeString) {
-                case "residential", "default" -> TownBlockType.RESIDENTIAL;
-                case "shop", "commercial" -> TownBlockType.COMMERCIAL;
-                case "arena" -> TownBlockType.ARENA;
-                case "embassy" -> TownBlockType.EMBASSY;
-                case "wilds" -> TownBlockType.WILDS;
-                case "inn" -> TownBlockType.INN;
-                case "jail" -> TownBlockType.JAIL;
-                case "farm" -> TownBlockType.FARM;
-                case "bank" -> TownBlockType.BANK;
-                default -> new TownBlockType(typeString);
-            };
+            TownBlockType type = TownBlockTypeHandler.getType(lower);
             for(TownBlock townBlock : plotGroup.getTownBlocks()){
                 townBlock.setType(type);
                 dataSource.saveTownBlock(townBlock);

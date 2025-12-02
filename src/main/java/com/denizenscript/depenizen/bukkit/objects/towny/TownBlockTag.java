@@ -780,19 +780,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         if(mechanism.matches("towny_type")){
             String typeString = mechanism.getValue().asString();
             String lower = typeString.toLowerCase();
-            TownBlockType type = switch (typeString) {
-                case "residential", "default" -> TownBlockType.RESIDENTIAL;
-                case "shop", "commercial" -> TownBlockType.COMMERCIAL;
-                case "arena" -> TownBlockType.ARENA;
-                case "embassy" -> TownBlockType.EMBASSY;
-                case "wilds" -> TownBlockType.WILDS;
-                case "inn" -> TownBlockType.INN;
-                case "jail" -> TownBlockType.JAIL;
-                case "farm" -> TownBlockType.FARM;
-                case "bank" -> TownBlockType.BANK;
-                default -> new TownBlockType(typeString);
-            };
-            townBlock.setType(type);
+            townBlock.setType(lower);
             dataSource.saveTownBlock(townBlock);
         }
         // <--[mechanism]

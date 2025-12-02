@@ -814,8 +814,34 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.has_pvp>
         // -->
-        if(mechanism.matches("has_pvp")){
-            town.setPVP(mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_pvp")) {
+            boolean val = mechanism.getValue().asBoolean();
+
+            // 1) Town-level toggle:
+            town.setPVP(val);
+
+            // 2) Town-level permission object:
+            TownyPermission perms = town.getPermissions();
+            if (perms != null) {
+                perms.set("pvp", val);
+            }
+
+            // 3) Propagate to unowned plots, like /town toggle pvp:
+            for (TownBlock townBlock : town.getTownBlocks()) {
+                try {
+                    if (townBlock.hasResident()) {
+                        continue; // skip resident-owned plots
+                    }
+                }
+                catch (Exception ignored) {
+                }
+                TownyPermission tbPerms = townBlock.getPermissions();
+                if (tbPerms != null) {
+                    tbPerms.set("pvp", val);
+                    dataSource.saveTownBlock(townBlock);
+                }
+            }
+
             dataSource.saveTown(town);
         }
         // <--[mechanism]
@@ -828,8 +854,32 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.has_firespread>
         // -->
-        if(mechanism.matches("has_firespread")){
-            town.setFire(mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_firespread")) {
+            boolean val = mechanism.getValue().asBoolean();
+
+            // Town toggle:
+            town.setFire(val);
+
+            TownyPermission perms = town.getPermissions();
+            if (perms != null) {
+                perms.set("fire", val);
+            }
+
+            for (TownBlock townBlock : town.getTownBlocks()) {
+                try {
+                    if (townBlock.hasResident()) {
+                        continue;
+                    }
+                }
+                catch (Exception ignored) {
+                }
+                TownyPermission tbPerms = townBlock.getPermissions();
+                if (tbPerms != null) {
+                    tbPerms.set("fire", val);
+                    dataSource.saveTownBlock(townBlock);
+                }
+            }
+
             dataSource.saveTown(town);
         }
         // <--[mechanism]
@@ -842,8 +892,31 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.has_explosions>
         // -->
-        if(mechanism.matches("has_explosions")){
-            town.setExplosion(mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_explosions")) {
+            boolean val = mechanism.getValue().asBoolean();
+
+            town.setExplosion(val);
+
+            TownyPermission perms = town.getPermissions();
+            if (perms != null) {
+                perms.set("explosion", val);
+            }
+
+            for (TownBlock townBlock : town.getTownBlocks()) {
+                try {
+                    if (townBlock.hasResident()) {
+                        continue;
+                    }
+                }
+                catch (Exception ignored) {
+                }
+                TownyPermission tbPerms = townBlock.getPermissions();
+                if (tbPerms != null) {
+                    tbPerms.set("explosion", val);
+                    dataSource.saveTownBlock(townBlock);
+                }
+            }
+
             dataSource.saveTown(town);
         }
         // <--[mechanism]
@@ -856,8 +929,31 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.has_mobs>
         // -->
-        if(mechanism.matches("has_mobs")){
-            town.setHasMobs(mechanism.getValue().asBoolean());
+        if (mechanism.matches("has_mobs")) {
+            boolean val = mechanism.getValue().asBoolean();
+
+            town.setHasMobs(val);
+
+            TownyPermission perms = town.getPermissions();
+            if (perms != null) {
+                perms.set("mobs", val);
+            }
+
+            for (TownBlock townBlock : town.getTownBlocks()) {
+                try {
+                    if (townBlock.hasResident()) {
+                        continue;
+                    }
+                }
+                catch (Exception ignored) {
+                }
+                TownyPermission tbPerms = townBlock.getPermissions();
+                if (tbPerms != null) {
+                    tbPerms.set("mobs", val);
+                    dataSource.saveTownBlock(townBlock);
+                }
+            }
+
             dataSource.saveTown(town);
         }
         // <--[mechanism]
@@ -999,79 +1095,80 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
             TownyPermission perms = town.getPermissions();
 
+            // Helper to map (group,action) -> TownyPermission key
+            String key;
+            switch (group) {
+                case "resident":
+                case "friend":
+                    switch (action) {
+                        case "build":   key = "residentbuild";   break;
+                        case "destroy": key = "residentdestroy"; break;
+                        case "switch":  key = "residentswitch";  break;
+                        case "itemuse":
+                        case "item_use": key = "residentitemuse"; break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
+                            return;
+                    }
+                    break;
+
+                case "ally":
+                case "allies":
+                    switch (action) {
+                        case "build":   key = "allybuild";   break;
+                        case "destroy": key = "allydestroy"; break;
+                        case "switch":  key = "allyswitch";  break;
+                        case "itemuse":
+                        case "item_use": key = "allyitemuse"; break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
+                            return;
+                    }
+                    break;
+
+                case "outsider":
+                case "outsiders":
+                    switch (action) {
+                        case "build":   key = "outsiderbuild";   break;
+                        case "destroy": key = "outsiderdestroy"; break;
+                        case "switch":  key = "outsiderswitch";  break;
+                        case "itemuse":
+                        case "item_use": key = "outsideritemuse"; break;
+                        default:
+                            mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
+                            return;
+                    }
+                    break;
+
+                default:
+                    mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
+                    return;
+            }
+
             try {
-                switch (group) {
-                    case "resident":
-                    case "friend": // optional alias
-                        switch (action) {
-                            case "build":
-                                perms.set("residentbuild", value);
-                                break;
-                            case "destroy":
-                                perms.set("residentdestroy", value);
-                                break;
-                            case "switch":
-                                perms.set("residentswitch", value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("residentitemuse", value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
-                                return;
-                        }
-                        break;
-
-                    case "ally":
-                    case "allies":
-                        switch (action) {
-                            case "build":
-                                perms.set("allybuild", value);
-                                break;
-                            case "destroy":
-                                perms.set("allydestroy", value);
-                                break;
-                            case "switch":
-                                perms.set("allyswitch", value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("allyitemuse", value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
-                                return;
-                        }
-                        break;
-
-                    case "outsider":
-                    case "outsiders":
-                        switch (action) {
-                            case "build":
-                                perms.set("outsiderbuild", value);
-                                break;
-                            case "destroy":
-                                perms.set("outsiderdestroy", value);
-                                break;
-                            case "switch":
-                                perms.set("outsiderswitch", value);
-                                break;
-                            case "itemuse":
-                            case "item_use":
-                                perms.set("outsideritemuse", value);
-                                break;
-                            default:
-                                mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
-                                return;
-                        }
-                        break;
-
-                    default:
-                        mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
-                        return;
-                }
+                // 1) Apply to town perms
+                perms.set(key, value);
                 dataSource.saveTown(town);
+
+                // 2) Mimic `/town set perm` behaviour:
+                //    propagate to all *unowned* townblocks so they stay in sync.
+                for (TownBlock townBlock : town.getTownBlocks()) {
+                    try {
+                        if (townBlock.hasResident()) {
+                            continue;
+                        }
+                    }
+                    catch (Exception ex) {
+                        continue;
+                    }
+
+                    TownyPermission tbPerms = townBlock.getPermissions();
+                    if (tbPerms == null) {
+                        continue;
+                    }
+                    tbPerms.set(key, value);
+                    dataSource.saveTownBlock(townBlock);
+                }
             }
             catch (Exception ex) {
                 mechanism.echoError("Failed to set Town perm '" + spec + "': " + ex.getMessage());
