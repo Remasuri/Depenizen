@@ -60,16 +60,42 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         if (lower.startsWith("townblock@")) {
             string = string.substring("townblock@".length());
         }
-        // format: world;x;z
-        String[] parts = string.split(";", 3);
-        if (parts.length != 3) {
+
+        String[] parts = null;
+
+        // Try list format first: world|x|z  (from <location.towny_grid_location>)
+        try {
+            ListTag list = ListTag.valueOf(string, context);
+            if (list.size() == 3) {
+                parts = new String[] {
+                        list.get(0),
+                        list.get(1),
+                        list.get(2)
+                };
+            }
+        }
+        catch (Exception ignored) {
+            // Not a list, we'll fall back
+        }
+
+        // Fallback: legacy "world;x;z"
+        if (parts == null && string.contains(";")) {
+            String[] split = string.split(";", 3);
+            if (split.length == 3) {
+                parts = split;
+            }
+        }
+
+        if (parts == null) {
             return null;
         }
+
         String worldName = parts[0];
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
             return null;
         }
+
         int x, z;
         try {
             x = Integer.parseInt(parts[1]);
@@ -292,15 +318,19 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // - <[some_townblock].at_offset[0,-1]> returns the townblock one plot north.
         // -->
         tagProcessor.registerTag(TownBlockTag.class, "at_offset", (attribute, object) -> {
-            if (!attribute.hasContext(1)) {
+            // New API: parameter lives in attribute.getParam()
+            if (!attribute.hasParam()) {
+                attribute.echoError("TownBlockTag.at_offset[...] requires input like 'x,z'.");
                 return null;
             }
-            String context = attribute.getContext(1);
-            // Expect "x,z"
-            String[] parts = context.split("\\s*,\\s*", 2);
+
+            String param = attribute.getParam();  // e.g. "1,-2" after any nested tags are resolved
+            String[] parts = param.split("\\s*,\\s*", 2);
             if (parts.length != 2) {
+                attribute.echoError("TownBlockTag.at_offset[...] input must be 'x,z' (for example '1,-2').");
                 return null;
             }
+
             int offX;
             int offZ;
             try {
@@ -308,6 +338,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                 offZ = Integer.parseInt(parts[1]);
             }
             catch (NumberFormatException ex) {
+                attribute.echoError("TownBlockTag.at_offset[...] values must be integers (got '" + param + "').");
                 return null;
             }
 
@@ -315,6 +346,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             WorldCoord target = base.add(offX, offZ);
             TownBlock targetBlock = TownyAPI.getInstance().getTownBlock(target);
             if (targetBlock == null) {
+                // No townblock there → return null as per your tag docs
                 return null;
             }
             return new TownBlockTag(targetBlock);
