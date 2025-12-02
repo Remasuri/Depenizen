@@ -234,6 +234,26 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
         // <--[tag]
+        // @attribute <TownBlockTag.x>
+        // @returns ElementTag(Number)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the townblock's X coordinate.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "x", (attribute, object) ->
+                new ElementTag(object.getCoord().getX()));
+
+        // <--[tag]
+        // @attribute <TownBlockTag.z>
+        // @returns ElementTag(Number)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the townblock's Z coordinate.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "z", (attribute, object) ->
+                new ElementTag(object.getCoord().getZ()));
+
+        // <--[tag]
         // @attribute <TownBlockTag.is_forsale>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
