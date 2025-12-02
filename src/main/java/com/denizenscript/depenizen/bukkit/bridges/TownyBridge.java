@@ -112,7 +112,20 @@ public class TownyBridge extends Bridge {
             }
             event.setReplacedObject(towns.getObjectAttribute(attribute.fulfill(1)));
         }
-
+        // <--[tag]
+        // @attribute <towny.townBlockSize>
+        // @returns ElementTag(Number)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the size (in blocks) of a single Towny townblock (plot),
+        // as configured by Towny's 'town_block_size' setting.
+        // This is the grid size used to calculate Towny coordinates.
+        // -->
+        if (attribute.startsWith("townBlockSize")) {
+            ElementTag size = new ElementTag(TownySettings.getTownBlockSize());
+            event.setReplacedObject(size.getObjectAttribute(attribute.fulfill(1)));
+            return;
+        }
         // <--[tag]
         // @attribute <towny.nations>
         // @returns ListTag(NationTag)
