@@ -259,13 +259,13 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
         // <--[tag]
-        // @attribute <PlotGroupTag.has_fire>
+        // @attribute <PlotGroupTag.has_firespread>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
         // @description
         // Returns whether firespread is enabled in this plot group.
         // -->
-        tagProcessor.registerTag(ElementTag.class,"has_fire",(attribute,object) -> {
+        tagProcessor.registerTag(ElementTag.class,"has_firespread",(attribute,object) -> {
             return new ElementTag(object.plotGroup.getPermissions().fire);
         });
 

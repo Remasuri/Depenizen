@@ -17,6 +17,7 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.object.*;
 
@@ -256,6 +257,150 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             return new LocationTag(blockLocation.getLowerMostCornerLocation());
         }));
         // <--[tag]
+        // @attribute <TownBlockTag.at_offset[<x>,<z>]>
+        // @returns TownBlockTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the townblock at the given X/Z offset (in townblock coordinates) from this one,
+        // or null if no townblock exists there.
+        //
+        // Offsets are specified in plot units, not blocks.
+        // For example:
+        // - <[some_townblock].at_offset[1,0]> returns the townblock one plot east.
+        // - <[some_townblock].at_offset[-1,0]> returns the townblock one plot west.
+        // - <[some_townblock].at_offset[0,1]> returns the townblock one plot south.
+        // - <[some_townblock].at_offset[0,-1]> returns the townblock one plot north.
+        // -->
+        tagProcessor.registerTag(TownBlockTag.class, "at_offset", (attribute, object) -> {
+            if (!attribute.hasContext(1)) {
+                return null;
+            }
+            String context = attribute.getContext(1);
+            // Expect "x,z"
+            String[] parts = context.split("\\s*,\\s*", 2);
+            if (parts.length != 2) {
+                return null;
+            }
+            int offX;
+            int offZ;
+            try {
+                offX = Integer.parseInt(parts[0]);
+                offZ = Integer.parseInt(parts[1]);
+            }
+            catch (NumberFormatException ex) {
+                return null;
+            }
+
+            WorldCoord base = object.getCoord();
+            WorldCoord target = base.add(offX, offZ);
+            TownBlock targetBlock = TownyAPI.getInstance().getTownBlock(target);
+            if (targetBlock == null) {
+                return null;
+            }
+            return new TownBlockTag(targetBlock);
+        });
+        // <--[tag]
+        // @attribute <TownBlockTag.neighbors>
+        // @returns ListTag(TownBlockTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of up to four neighboring townblocks (north, south, east, and west)
+        // that exist next to this townblock.
+        // Townblocks that do not exist are skipped.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "neighbors", (attribute, object) -> {
+            ListTag list = new ListTag();
+            WorldCoord base = object.getCoord();
+            TownyAPI api = TownyAPI.getInstance();
+
+            int[][] dirs = new int[][] {
+                    {1, 0},   // east
+                    {-1, 0},  // west
+                    {0, 1},   // south
+                    {0, -1}   // north
+            };
+
+            for (int[] dir : dirs) {
+                WorldCoord neighborCoord = base.add(dir[0], dir[1]);
+                TownBlock neighbor = api.getTownBlock(neighborCoord);
+                if (neighbor != null) {
+                    list.addObject(new TownBlockTag(neighbor));
+                }
+            }
+
+            return list;
+        });
+        // <--[tag]
+        // @attribute <TownBlockTag.corners>
+        // @returns ListTag(LocationTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of the 4 corner locations of this townblock.
+        //
+        // The corners are based on the townblock's configured size and use the same
+        // Y-value as <TownBlockTag.world_location>.
+        //
+        // Order of corners in the list:
+        // 1) North-West (min X, min Z)
+        // 2) North-East (max X, min Z)
+        // 3) South-East (max X, max Z)
+        // 4) South-West (min X, max Z)
+        // -->
+        tagProcessor.registerTag(ListTag.class, "corners", (attribute, object) -> {
+            ListTag list = new ListTag();
+
+            WorldCoord coord = object.getCoord();
+            Location base = coord.getLowerMostCornerLocation();
+            World world = base.getWorld();
+            double y = base.getY();
+
+            double xMin = base.getX();
+            double zMin = base.getZ();
+
+            int size = TownySettings.getTownBlockSize();
+            double xMax = xMin + size - 1;
+            double zMax = zMin + size - 1;
+
+            // 1) North-West
+            list.addObject(new LocationTag(new Location(world, xMin, y, zMin)));
+            // 2) North-East
+            list.addObject(new LocationTag(new Location(world, xMax, y, zMin)));
+            // 3) South-East
+            list.addObject(new LocationTag(new Location(world, xMax, y, zMax)));
+            // 4) South-West
+            list.addObject(new LocationTag(new Location(world, xMin, y, zMax)));
+
+            return list;
+        });
+        // <--[tag]
+        // @attribute <TownBlockTag.center>
+        // @returns LocationTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the center location of this townblock.
+        //
+        // The center is computed as the midpoint of the configured plot size
+        // based on Towny's lower-most corner location. Y-level matches
+        // <TownBlockTag.world_location>.
+        // -->
+        tagProcessor.registerTag(LocationTag.class, "center", (attribute, object) -> {
+            WorldCoord coord = object.getCoord();
+
+            Location base = coord.getLowerMostCornerLocation();
+            World world = base.getWorld();
+            double y = base.getY();
+
+            double xMin = base.getX();
+            double zMin = base.getZ();
+
+            int size = TownySettings.getTownBlockSize();
+            // Center of [xMin .. xMin + size - 1] → xMin + (size - 1) / 2.0
+            double centerX = xMin + (size - 1) / 2.0;
+            double centerZ = zMin + (size - 1) / 2.0;
+
+            return new LocationTag(new Location(world, centerX, y, centerZ));
+        });
+        // <--[tag]
         // @attribute <TownBlockTag.resident>
         // @returns PlayerTag
         // @plugin Depenizen, Towny
@@ -324,13 +469,13 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
         // <--[tag]
-        // @attribute <TownBlockTag.has_fire>
+        // @attribute <TownBlockTag.has_firespread>
         // @returns ElementTag(Boolean)
         // @plugin Depenizen, Towny
         // @description
         // Returns whether firespread is enabled in this townblock.
         // -->
-        tagProcessor.registerTag(ElementTag.class,"has_fire",(attribute,object) -> {
+        tagProcessor.registerTag(ElementTag.class,"has_firespread",(attribute,object) -> {
             return new ElementTag(object.townBlock.getPermissions().fire);
         });
 
@@ -582,9 +727,9 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @plugin Depenizen, Towny
         // @description
         // Sets whether firespread is enabled in this townblock.
-        // Note that the related tag is <TownBlockTag.has_fire>.
+        // Note that the related tag is <TownBlockTag.has_firespread>.
         // @tags
-        // <TownBlockTag.has_fire>
+        // <TownBlockTag.has_firespread>
         // -->
         if(mechanism.matches("has_firespread")){
             TownyPermission perms = townBlock.getPermissions();

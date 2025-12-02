@@ -384,7 +384,16 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ListTag.class, "outlaws", (attribute, object) -> {
             return getPlayersFromResidents(object.town.getOutlaws());
         });
-
+        // <--[tag]
+        // @attribute <TownTag.homeblock>
+        // @returns TownBlockTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the towns current homeblock
+        // -->
+        tagProcessor.registerTag(TownBlockTag.class,"homeblock",((attribute, object) -> {
+            return new TownBlockTag(object.town.getHomeBlockOrNull());
+        }));
         // <--[tag]
         // @attribute <TownTag.player_count>
         // @returns ElementTag(Number)
@@ -1080,7 +1089,23 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // <TownTag.spawn>
         // -->
         if(mechanism.matches("spawn")){
+            //TODO: Add Homeblock check and output error if this does not contain homeblock
             town.setSpawn(mechanism.valueAsType(LocationTag.class));
+            dataSource.saveTown(town);
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name homeblock
+        // @input TownBlockTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the homeblock of the town
+        // @tags
+        // <TownTag.spawn>
+        // -->
+        if(mechanism.matches("homeblock")){
+            TownBlockTag townblockTag = mechanism.valueAsType(TownBlockTag.class);
+            town.setHomeBlock(townblockTag.townBlock);
             dataSource.saveTown(town);
         }
     }

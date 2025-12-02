@@ -2,6 +2,7 @@ package com.denizenscript.depenizen.bukkit.bridges;
 
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.DenizenCore;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.depenizen.bukkit.commands.noteblockapi.NBSCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.ClaimCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.PlotGroupCommand;
@@ -31,7 +32,9 @@ import com.denizenscript.denizencore.tags.ReplaceableTagEvent;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagManager;
 import com.palmergames.bukkit.towny.object.TownyWorld;
-
+import com.denizenscript.denizencore.objects.core.MapTag;
+import com.palmergames.bukkit.towny.TownySettings;
+import com.palmergames.bukkit.towny.TownySettings.TownLevel;
 public class TownyBridge extends Bridge {
 
     @Override
@@ -123,6 +126,59 @@ public class TownyBridge extends Bridge {
                 nations.addObject(new NationTag(nation));
             }
             event.setReplacedObject(nations.getObjectAttribute(attribute.fulfill(1)));
+        }
+        // <--[tag]
+        // @attribute <towny.town_levels>
+        // @returns ListTag(MapTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of Towny town-level definitions from the config.
+        //
+        // Each entry in the list is a MapTag with keys:
+        // - townblock_limit      (ElementTag(Number))
+        // - townblock_buy_bonus_limit (ElementTag(Number))
+        // - upkeep_modifier      (ElementTag(Decimal))
+        // - outpost_limit        (ElementTag(Number))
+        // - debt_cap_modifier    (ElementTag(Decimal))
+        // - name_prefix          (ElementTag)
+        // - name_postfix         (ElementTag)
+        // - mayor_prefix         (ElementTag)
+        // - mayor_postfix        (ElementTag)
+        //
+        // Example usage:
+        // - Get the minimum residents required for the second town level:
+        //   <towny.town_levels.get[1].get[num_residents]>
+        // - Get the townblock limit of the level that needs 10 residents:
+        //   <towny.town_levels.parse_tag[
+        //       <[levels].filter[num_residents.equals[10]].first.get[townblock_limit]>
+        //   ]>
+        // -->
+        if (attribute.startsWith("town_levels")) {
+            ListTag levelsList = new ListTag();
+
+            for (TownLevel level : TownySettings.getConfigTownLevel().values()) {
+                MapTag map = new MapTag();
+
+                // core numeric stuff
+                map.putObject("townblock_limit", new ElementTag(level.townBlockLimit()));
+                map.putObject("townblock_buy_bonus_limit", new ElementTag(level.townBlockBuyBonusLimit()));
+                map.putObject("upkeep_modifier", new ElementTag(level.upkeepModifier()));
+                map.putObject("outpost_limit", new ElementTag(level.townOutpostLimit()));
+                map.putObject("debt_cap_modifier", new ElementTag(level.debtCapModifier()));
+
+                // naming/titles
+                map.putObject("name_prefix", new ElementTag(level.namePrefix()));
+                map.putObject("name_postfix", new ElementTag(level.namePostfix()));
+                map.putObject("mayor_prefix", new ElementTag(level.mayorPrefix()));
+                map.putObject("mayor_postfix", new ElementTag(level.mayorPostfix()));
+
+                // If you ever want block-type limits exposed, you could also serialize:
+                // level.getTownBlockTypeLimits() -> another MapTag or ListTag.
+
+                levelsList.addObject(map);
+            }
+
+            event.setReplacedObject(levelsList.getObjectAttribute(attribute.fulfill(1)));
         }
     }
 
