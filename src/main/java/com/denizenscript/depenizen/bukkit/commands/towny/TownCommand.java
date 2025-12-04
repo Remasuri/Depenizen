@@ -142,7 +142,7 @@ public class TownCommand extends AbstractCommand {
                     Town town = universe.getTown(name);
 
                     // Attach resident + mayor
-                    town.addResidentCheck(resident);
+                    resident.setTown(town);
                     town.setMayor(resident);
 
                     // Create the initial TownBlock as the homeblock,
