@@ -149,8 +149,6 @@ public class TownCommand extends AbstractCommand {
                     // following the pattern used by TownClaim: new TownBlock(x, z, townyWorld)
                     TownBlock townBlock = new TownBlock(worldCoord.getX(), worldCoord.getZ(), townyWorld);
                     townBlock.setTown(town);
-                    // Mirror town permissions onto the block
-                    townBlock.setType(townBlock.getType());
                     universe.getDataSource().saveTownBlock(townBlock);
 
                     // Set homeblock & spawn
