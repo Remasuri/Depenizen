@@ -8,13 +8,10 @@ import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.exceptions.NotRegisteredException;
-import com.palmergames.bukkit.towny.object.Coord;
-import com.palmergames.bukkit.towny.object.TownBlock;
+import com.palmergames.bukkit.towny.object.*;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.palmergames.bukkit.towny.object.TownyWorld;
-import com.palmergames.bukkit.towny.object.WorldCoord;
 
 import java.util.UUID;
 
@@ -170,6 +167,88 @@ public class TownyLocationProperties {
             }
             return new ElementTag(distanceHomeBlocksPassed && distanceTownPlotsPassed);
         }));
+        // <--[tag]
+        // @attribute <LocationTag.towny_is_new_homeblock_allowed>
+        // @returns ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns whether this location may be assigned as the *new homeblock* of its town,
+        // following the same distance and world rules used by Towny's
+        // `/town set homeblock` command.
+        //
+        // This tag checks:
+        // - The location is inside a Towny world.
+        // - The location is part of a claimed TownBlock (not wilderness).
+        // - The TownBlock belongs to a town.
+        // - The location is at least the configured minimum distance from:
+        //     - Other towns' homeblocks
+        //     - Other towns' plot blocks
+        //
+        // It returns `true` only if Towny would allow setting this location
+        // as the town's homeblock.
+        //
+        // Useful when validating whether a town may move its homeblock
+        // prior to calling a Depenizen script or Towny API method.
+        // -->
+        LocationTag.tagProcessor.registerTag(ElementTag.class, "towny_is_new_homeblock_allowed", ((attribute, location) -> {
+            TownyAPI api = TownyAPI.getInstance();
+
+            // Convert to WorldCoord
+            WorldCoord wc;
+            try {
+                wc = WorldCoord.parseWorldCoord(location);
+            }
+            catch (Exception ex) {
+                attribute.echoError("Towny: cannot convert location to WorldCoord: " + ex.getMessage());
+                return new ElementTag(false);
+            }
+
+            TownyWorld tWorld = wc.getTownyWorld();
+            if (tWorld == null || !tWorld.isUsingTowny()) {
+                return new ElementTag(false);
+            }
+
+            // Homeblocks MUST be inside a town, so ensure it is claimed.
+            TownBlock block = api.getTownBlock(wc);
+            if (block == null) {
+                return new ElementTag(false); // must be claimed
+            }
+
+            Town town = block.getTownOrNull();
+            if (town == null) {
+                return new ElementTag(false); // must belong to a town
+            }
+
+            // Pull Towny config values
+            int requiredHomeBlocks = TownySettings.getMinDistanceFromTownHomeblocks();
+            int requiredTownPlots = TownySettings.getMinDistanceFromTownPlotblocks();
+
+            Coord coord = new Coord(wc.getX(), wc.getZ());
+
+            boolean distanceHomeBlocksPassed;
+            boolean distanceTownPlotsPassed;
+
+            // Homeblock -> homeblock distance check
+            if (requiredHomeBlocks > 0) {
+                int distanceHomeBlocks = tWorld.getMinDistanceFromOtherTownsHomeBlocks(coord, town);
+                distanceHomeBlocksPassed = distanceHomeBlocks >= requiredHomeBlocks;
+            }
+            else {
+                distanceHomeBlocksPassed = true;
+            }
+
+            // Plot -> plot distance check
+            if (requiredTownPlots > 0) {
+                int distanceTownPlots = tWorld.getMinDistanceFromOtherTownsPlots(coord, town);
+                distanceTownPlotsPassed = distanceTownPlots >= requiredTownPlots;
+            }
+            else {
+                distanceTownPlotsPassed = true;
+            }
+
+            return new ElementTag(distanceHomeBlocksPassed && distanceTownPlotsPassed);
+        }));
+
         // <--[tag]
         // @attribute <LocationTag.has_town>
         // @returns ElementTag(Boolean)
