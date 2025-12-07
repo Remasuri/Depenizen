@@ -1,4 +1,5 @@
 package com.denizenscript.depenizen.bukkit.objects.towny;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import com.palmergames.bukkit.towny.object.TownyPermission;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizencore.DenizenCore;
@@ -23,9 +24,9 @@ import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 
-import java.util.Collection;
-import java.util.UUID;
+import java.util.*;
 
+import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
 public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
     // <--[ObjectType]
@@ -568,6 +569,125 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
             return output;
         });
+// <--[tag]
+// @attribute <TownTag.towny_visualizer_lines[world=<world>]>
+// @returns ListTag
+// @plugin Depenizen, Towny
+// @description
+// Returns a list of static visualizer edges for the entire town (in a single world).
+//
+// Each edge is a MapTag: [start=Location; vector=Location(Vector); type=Element(String); plotgroup=Element(UUID?)]
+//
+// Parameters (MapTag):
+// - world: optional, a WorldTag or world name. If omitted, the first world that the town has plots in is used.
+//
+// This list is completely static (no selection) and is intended to be cached,
+// for example as a flag on the town and reused by all players.
+// -->
+        tagProcessor.registerTag(ListTag.class, "towny_visualizer_lines", (attribute, object) -> {
+            Town town = object.town;
+            if (town == null) {
+                return new ListTag();
+            }
+
+            World bukkitWorld = null;
+
+            // --- PARAM PARSING ---
+            if (attribute.hasParam()) {
+                ObjectTag paramObj = attribute.getParamObject();
+                if (paramObj.canBeType(MapTag.class)) {
+                    MapTag inputMap = paramObj.asType(MapTag.class, attribute.context);
+
+                    // world=<world>
+                    if (inputMap.containsKey("world")) {
+                        ObjectTag worldObj = inputMap.getObject("world");
+                        WorldTag worldTag;
+                        if (worldObj instanceof WorldTag) {
+                            worldTag = (WorldTag) worldObj;
+                        }
+                        else {
+                            worldTag = worldObj.asType(WorldTag.class, attribute.context);
+                        }
+                        if (worldTag != null) {
+                            bukkitWorld = worldTag.getWorld();
+                        }
+                    }
+                }
+                else {
+                    // Simple syntax: <[town].towny_visualizer_lines[<world>]>
+                    if (paramObj instanceof WorldTag) {
+                        bukkitWorld = ((WorldTag) paramObj).getWorld();
+                    }
+                    else {
+                        WorldTag worldTag = paramObj.asType(WorldTag.class, attribute.context);
+                        if (worldTag != null) {
+                            bukkitWorld = worldTag.getWorld();
+                        }
+                    }
+                }
+            }
+
+            // --- COLLECT TOWNBLOCKS IN TARGET WORLD ---
+            List<TownBlock> blocksInWorld = new ArrayList<>();
+            for (TownBlock tb : town.getTownBlocks()) {
+                if (tb == null) {
+                    continue;
+                }
+                WorldCoord wc = tb.getWorldCoord();
+                World tbWorld = wc.getBukkitWorld();
+                if (tbWorld == null) {
+                    continue;
+                }
+                if (bukkitWorld != null && !tbWorld.equals(bukkitWorld)) {
+                    continue;
+                }
+                if (bukkitWorld == null) {
+                    bukkitWorld = tbWorld;
+                }
+                blocksInWorld.add(tb);
+            }
+
+            if (bukkitWorld == null || blocksInWorld.isEmpty()) {
+                return new ListTag();
+            }
+
+            // Compute Towny coord bounds for this world
+            int minX = Integer.MAX_VALUE;
+            int maxX = Integer.MIN_VALUE;
+            int minZ = Integer.MAX_VALUE;
+            int maxZ = Integer.MIN_VALUE;
+
+            for (TownBlock tb : blocksInWorld) {
+                int x = tb.getX();
+                int z = tb.getZ();
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+
+            if (minX == Integer.MAX_VALUE) {
+                return new ListTag();
+            }
+
+            // Resolve TownyWorld from any block in that world
+            TownyWorld townyWorld;
+            try {
+                townyWorld = blocksInWorld.get(0).getWorldCoord().getTownyWorld();
+            }
+            catch (Exception ex) {
+                return new ListTag();
+            }
+
+            // Expand bounds slightly so borders against wilderness render cleanly
+            return TownyVisualizerUtils.buildVisualizerEdges(
+                    townyWorld,
+                    bukkitWorld,
+                    minX - 1, maxX + 1,
+                    minZ - 1, maxZ + 1
+            );
+        });
+
 
         // <--[tag]
         // @attribute <TownTag.list_plotgroups>

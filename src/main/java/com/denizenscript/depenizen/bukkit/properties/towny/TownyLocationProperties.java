@@ -13,10 +13,11 @@ import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.exceptions.NotRegisteredException;
+import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.*;
 import org.bukkit.Location;
 import org.bukkit.util.Vector;
-
+import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
 import java.util.*;
 
 public class TownyLocationProperties {
@@ -93,7 +94,7 @@ public class TownyLocationProperties {
 
         // <--[tag]
         // @attribute <LocationTag.towny_grid_location>
-        // @returns ElementTag
+        // @returns ListTag
         // @plugin Depenizen, Towny
         // @description
         // Returns the Towny grid coordinates (world;X;Z) of this location.
@@ -137,8 +138,8 @@ public class TownyLocationProperties {
             int requiredHomeBlocks = TownySettings.getMinDistanceFromTownHomeblocks();
             int requiredTownPlots = TownySettings.getMinDistanceFromTownPlotblocks();
             Coord coord = new Coord(wc.getX(), wc.getZ());
-            boolean distanceHomeBlocksPassed = false;
-            boolean distanceTownPlotsPassed = false;
+            boolean distanceHomeBlocksPassed;
+            boolean distanceTownPlotsPassed;
             if (requiredHomeBlocks > 0) {
                 int distanceHomeBlocks = townyWorld.getMinDistanceFromOtherTownsHomeBlocks(coord);
                 distanceHomeBlocksPassed = distanceHomeBlocks >= requiredHomeBlocks;
@@ -153,170 +154,139 @@ public class TownyLocationProperties {
             }
             return new ElementTag(distanceHomeBlocksPassed && distanceTownPlotsPassed);
         }));
-
         // <--[tag]
-        // @attribute <LocationTag.towny_visualizer_lines[radius=<#>;selected=<list_of_townblocks>]>
-        // @returns ListTag
+        // @attribute <LocationTag.towny_nearest_town>
+        // @returns TownTag
         // @plugin Depenizen, Towny
         // @description
-        // Returns a list of visualizer edges for the grid around the location.
-        // Each edge is a MapTag: [start=Location; vector=Location(Vector); type=Element(String)]
-        // Uses a Vertical-Dominant Butt-Joint algorithm to ensure edges meet perfectly at corners
-        // without overlapping or gaps, specifically for Block Display entities.
-        // The 'type' returns the Plot Group name, "town" (if no group), "wilderness", or "selection".
+        // Returns the nearest Towny town to this location, limited to the same world.
+        //
+        // Behavior:
+        // - If the location is already within a town, returns that town.
+        // - Otherwise, scans all Towny towns in the same world and returns the closest one.
+        //   Distance is measured horizontally (X/Z) from the location to the town's spawn.
+        //   If a town has no spawn, its homeblock center is used instead.
+        // - If no town exists in that world, returns null.
         // -->
+        LocationTag.tagProcessor.registerTag(TownTag.class, "towny_nearest_town", (attribute, location) -> {
+            TownyAPI api = TownyAPI.getInstance();
+            org.bukkit.World world = location.getWorld();
+            if (world == null) {
+                return null;
+            }
+
+            // 1) If we're already in a town, just return that.
+            Town directTown = api.getTown(location);
+            if (directTown != null) {
+                return new TownTag(directTown);
+            }
+
+            TownyUniverse universe = TownyUniverse.getInstance();
+            Town nearest = null;
+            double bestDistSq = Double.MAX_VALUE;
+
+            for (Town town : universe.getTowns()) {
+                Location referenceLoc = null;
+
+                // Prefer the town spawn if it exists and is in the same world
+                try {
+                    Location spawn = town.getSpawn();
+                    if (spawn != null && spawn.getWorld() != null && spawn.getWorld().equals(world)) {
+                        referenceLoc = spawn;
+                    }
+                }
+                catch (TownyException ignored) {
+                    // no spawn set, we'll try homeblock below
+                }
+
+                // Fallback: homeblock center, if in same world
+                if (referenceLoc == null) {
+                    TownBlock home = town.getHomeBlockOrNull();
+                    if (home != null) {
+                        WorldCoord wc = home.getWorldCoord();
+                        org.bukkit.World hbWorld = wc.getBukkitWorld();
+                        if (hbWorld != null && hbWorld.equals(world)) {
+                            int size = TownySettings.getTownBlockSize();
+                            double centerX = wc.getX() * size + (size / 2.0);
+                            double centerZ = wc.getZ() * size + (size / 2.0);
+                            referenceLoc = new Location(hbWorld, centerX, location.getY(), centerZ);
+                        }
+                    }
+                }
+
+                if (referenceLoc == null || !referenceLoc.getWorld().equals(world)) {
+                    continue; // town is in another world or has no usable reference
+                }
+
+                double dx = referenceLoc.getX() - location.getX();
+                double dz = referenceLoc.getZ() - location.getZ();
+                double distSq = dx * dx + dz * dz;
+
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    nearest = town;
+                }
+            }
+
+            if (nearest == null) {
+                return null;
+            }
+            return new TownTag(nearest);
+        });
+// <--[tag]
+// @attribute <LocationTag.towny_visualizer_lines[radius=<#>]>
+// @returns ListTag
+// @plugin Depenizen, Towny
+// @description
+// Returns a list of static visualizer edges for the grid around the location.
+//
+// Each edge is a MapTag: [start=Location; vector=Location(Vector); type=Element(String); plotgroup=Element(UUID?)]
+//
+// This uses the shared TownyVisualizerUtils logic.
+// There is NO selection support here - this list is safe to cache and reuse.
+// -->
         LocationTag.tagProcessor.registerTag(ListTag.class, "towny_visualizer_lines", (attribute, location) -> {
             TownyAPI api = TownyAPI.getInstance();
             WorldCoord centerWc = WorldCoord.parseWorldCoord(location);
             TownyWorld townyWorld = centerWc.getTownyWorld();
 
-            if (townyWorld == null) return new ListTag();
+            if (townyWorld == null) {
+                return new ListTag();
+            }
 
             // --- 1. PARSE INPUTS ---
             int radius = 1;
-            Set<TownBlock> selectedSet = new HashSet<>();
 
             if (attribute.hasParam()) {
                 ObjectTag paramObj = attribute.getParamObject();
 
-                // Handle MapTag input (Modern Syntax)
+                // MapTag input: radius=<#>
                 if (paramObj.canBeType(MapTag.class)) {
                     MapTag inputMap = paramObj.asType(MapTag.class, attribute.context);
 
                     if (inputMap.containsKey("radius")) {
                         radius = inputMap.getObject("radius").asElement().asInt();
                     }
-
-                    if (inputMap.containsKey("selected")) {
-                        ListTag selectionList = inputMap.getObject("selected").asType(ListTag.class, attribute.context);
-                        for (ObjectTag tag : selectionList.objectForms) {
-                            // Support both TownBlockTag and LocationTag inputs
-                            if (tag instanceof TownBlockTag) {
-                                selectedSet.add(((TownBlockTag) tag).getTownBlock());
-                            } else if (tag instanceof LocationTag) {
-                                TownBlock tb = TownyAPI.getInstance().getTownBlock((LocationTag) tag);
-                                if (tb != null) selectedSet.add(tb);
-                            }
-                        }
-                    }
                 }
-                // Handle Integer input (Legacy/Simple Syntax)
                 else {
+                    // Simple syntax: <location.towny_visualizer_lines[3]>
                     radius = paramObj.asElement().asInt();
                 }
             }
 
-            // --- 2. CONFIGURATION ---
-            int size = TownySettings.getTownBlockSize();
-            double inset = 0.4; // Distance from the absolute border (half visual wall thickness)
             int centerX = centerWc.getX();
             int centerZ = centerWc.getZ();
-            ListTag lines = new ListTag();
+            int minX = centerX - radius;
+            int maxX = centerX + radius;
+            int minZ = centerZ - radius;
+            int maxZ = centerZ + radius;
 
-            // Define bounds
-            int minX = centerX - radius; int maxX = centerX + radius;
-            int minZ = centerZ - radius; int maxZ = centerZ + radius;
-
-            // --- 3. VERTICAL SCAN (X Boundaries, Lines run along Z) ---
-            for (int x = minX; x < maxX; x++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    TownBlock left = getSafeTownBlock(townyWorld, x, z);
-                    TownBlock right = getSafeTownBlock(townyWorld, x + 1, z);
-
-                    if (!areBlocksMerged(left, right, selectedSet)) {
-                        double borderX = (x + 1) * size;
-                        double zBase = z * size;
-
-                        // DRAW LEFT BLOCK'S EDGE (Right side of Left block)
-                        if (shouldRenderEdge(left, selectedSet)) {
-                            boolean topContinues = !areBlocksMerged(
-                                    getSafeTownBlock(townyWorld, x, z - 1),
-                                    getSafeTownBlock(townyWorld, x + 1, z - 1),
-                                    selectedSet
-                            );
-                            boolean bottomContinues = !areBlocksMerged(
-                                    getSafeTownBlock(townyWorld, x, z + 1),
-                                    getSafeTownBlock(townyWorld, x + 1, z + 1),
-                                    selectedSet
-                            );
-
-                            double start = topContinues ? 0 : inset;
-                            double end = bottomContinues ? 0 : inset;
-                            double len = size - start - end;
-
-                            if (len > 0) {
-                                lines.addObject(createEdge(
-                                        new Location(location.getWorld(), borderX - inset, 0, zBase + start),
-                                        new Vector(0, 0, len), // Points Z+
-                                        getEdgeType(left, selectedSet)
-                                ));
-                            }
-                        }
-
-                        // DRAW RIGHT BLOCK'S EDGE (Left side of Right block)
-                        if (shouldRenderEdge(right, selectedSet)) {
-                            boolean topContinues = !areBlocksMerged(
-                                    getSafeTownBlock(townyWorld, x, z - 1),
-                                    getSafeTownBlock(townyWorld, x + 1, z - 1),
-                                    selectedSet
-                            );
-                            boolean bottomContinues = !areBlocksMerged(
-                                    getSafeTownBlock(townyWorld, x, z + 1),
-                                    getSafeTownBlock(townyWorld, x + 1, z + 1),
-                                    selectedSet
-                            );
-
-                            double start = topContinues ? 0 : inset;
-                            double end = bottomContinues ? 0 : inset;
-                            double len = size - start - end;
-
-                            if (len > 0) {
-                                lines.addObject(createEdge(
-                                        new Location(location.getWorld(), borderX + inset, 0, zBase + start),
-                                        new Vector(0, 0, len), // Points Z+
-                                        getEdgeType(right, selectedSet)
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 4. HORIZONTAL SCAN (Z Boundaries, Lines run along X) ---
-            for (int z = minZ; z < maxZ; z++) {
-                for (int x = minX; x <= maxX; x++) {
-                    TownBlock top = getSafeTownBlock(townyWorld, x, z);
-                    TownBlock bottom = getSafeTownBlock(townyWorld, x, z + 1);
-
-                    if (!areBlocksMerged(top, bottom, selectedSet)) {
-                        double borderZ = (z + 1) * size;
-                        double xBase = x * size;
-
-                        // Horizontal lines always shrunk to fit
-                        double len = size - (inset * 2);
-
-                        // DRAW TOP BLOCK'S EDGE (Bottom side of Top block)
-                        if (shouldRenderEdge(top, selectedSet)) {
-                            lines.addObject(createEdge(
-                                    new Location(location.getWorld(), xBase + inset, 0, borderZ - inset),
-                                    new Vector(len, 0, 0), // Points X+
-                                    getEdgeType(top, selectedSet)
-                            ));
-                        }
-
-                        // DRAW BOTTOM BLOCK'S EDGE (Top side of Bottom block)
-                        if (shouldRenderEdge(bottom, selectedSet)) {
-                            lines.addObject(createEdge(
-                                    new Location(location.getWorld(), xBase + inset, 0, borderZ + inset),
-                                    new Vector(len, 0, 0), // Points X+
-                                    getEdgeType(bottom, selectedSet)
-                            ));
-                        }
-                    }
-                }
-            }
-
-            return lines;
+            return TownyVisualizerUtils.buildVisualizerEdges(
+                    townyWorld,
+                    location.getWorld(),
+                    minX, maxX,
+                    minZ, maxZ
+            );
         });
 
 
@@ -464,96 +434,5 @@ public class TownyLocationProperties {
             return null;
         }
         return new PlayerTag(player);
-    }
-
-    // --- HELPER METHODS ---
-
-    private static TownBlock getSafeTownBlock(TownyWorld world, int x, int z) {
-        try {
-            return world.getTownBlock(x, z);
-        } catch (NotRegisteredException e) {
-            return null;
-        }
-    }
-
-    private static String getEdgeType(TownBlock tb, Set<TownBlock> selection) {
-        // 1. Selection Override
-        if (tb != null && selection.contains(tb)) return "selection";
-
-        // 2. Wilderness
-        if (tb == null || !tb.hasTown()) return "wilderness";
-
-        // 3. Plot Group Logic
-        if (tb.hasPlotObjectGroup()) {
-            try {
-                // The Plot Group itself doesn't have a "Type", but its constituent blocks do.
-                // We grab the type of the FIRST block in the group to define the group's type.
-                PlotGroup group = tb.getPlotObjectGroup();
-                Collection<TownBlock> blocks = group.getTownBlocks();
-                if (blocks != null && !blocks.isEmpty()) {
-                    return blocks.iterator().next().getType().getName().toLowerCase();
-                }
-            } catch (Exception e) {
-                // Fallthrough if error accessing group data
-            }
-        }
-
-        // 4. Default: It is a town block, but not in a group
-        return "town";
-    }
-
-    private static boolean shouldRenderEdge(TownBlock tb, Set<TownBlock> selection) {
-        if (tb != null && selection.contains(tb)) return true;
-        if (tb != null && tb.hasTown()) return true;
-        return false;
-    }
-
-    private static boolean areBlocksMerged(TownBlock a, TownBlock b, Set<TownBlock> selection) {
-        boolean aSel = (a != null && selection.contains(a));
-        boolean bSel = (b != null && selection.contains(b));
-
-        // 1. Both Selected -> Merge
-        if (aSel && bSel) return true;
-        // 2. One Selected, One Not -> Separate
-        if (aSel != bSel) return false;
-
-        // Neither selected: Check general Towny status
-        boolean aHasTown = (a != null && a.hasTown());
-        boolean bHasTown = (b != null && b.hasTown());
-
-        // 3. Both Wilderness -> Merge (We don't draw lines in the wild)
-        if (!aHasTown && !bHasTown) return true;
-        // 4. One Town, One Wilderness -> Separate (Draw Town Border)
-        if (aHasTown != bHasTown) return false;
-
-        // 5. Both are Towns (Check if they are the SAME town)
-        try {
-            if (!a.getTown().equals(b.getTown())) return false; // Different towns = Border
-
-            // Same Town: Check PlotGroups
-            boolean aHasPG = a.hasPlotObjectGroup();
-            boolean bHasPG = b.hasPlotObjectGroup();
-
-            if (aHasPG && bHasPG) {
-                // Both have groups. Are they the SAME group?
-                return a.getPlotObjectGroup().equals(b.getPlotObjectGroup());
-            }
-
-            // If one has group and the other doesn't -> Separate
-            if (aHasPG != bHasPG) return false;
-
-            // Neither has group -> Merge (They are both generic town plots)
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private static MapTag createEdge(Location start, Vector vec, String type) {
-        MapTag map = new MapTag();
-        map.putObject("start", new LocationTag(start));
-        map.putObject("vector", new LocationTag(vec.toLocation(start.getWorld())));
-        map.putObject("type", new ElementTag(type));
-        return map;
     }
 }
