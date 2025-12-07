@@ -6,6 +6,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.event.TownPreClaimEvent;
 import org.bukkit.event.EventHandler;
@@ -27,7 +28,8 @@ public class PlayerClaimsPlotScriptEvent extends BukkitScriptEvent implements Li
     // <context.is_outpost> Returns whether the new plot is an outpost (not connected to the main town).
     // <context.is_new_town> Returns whether this is a new town. New towns may not have certain tags available.
     // <context.town> Returns a TownTag of the town.
-    // <context.cuboid> Returns the cuboid that will be claimed by the town.
+    // <context.townblock> Returns the TownBlockTag that will be claimed.
+    // <context.cuboid> Returns the cuboid that will be claimed by the town. (Historical/compat helper.)
     //
     // @Determine
     // "CANCEL_MESSAGE:<ElementTag>" to set the message Towny sends when cancelled.
@@ -65,11 +67,19 @@ public class PlayerClaimsPlotScriptEvent extends BukkitScriptEvent implements Li
             case "is_outpost":
                 return new ElementTag(event.isOutpost());
             case "is_new_town":
+                // Towny uses 'home block' for the initial/new-town claim
                 return new ElementTag(event.isHomeBlock());
             case "town":
                 return new TownTag(event.getTown());
+            case "townblock":
+                // New: direct TownBlockTag output
+                return new TownBlockTag(event.getTownBlock());
             case "cuboid":
-                return TownTag.getCuboid(event.getPlayer().getWorld(), event.getTownBlock().getX(), event.getTownBlock().getZ());
+                // Backwards compatible helper
+                return TownTag.getCuboid(
+                        event.getPlayer().getWorld(),
+                        event.getTownBlock().getX(),
+                        event.getTownBlock().getZ());
         }
         return super.getContext(name);
     }

@@ -3,6 +3,7 @@ package com.denizenscript.depenizen.bukkit.commands.towny;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
@@ -42,41 +43,11 @@ public class ClaimCommand extends AbstractCommand {
     // @Short Claims Towny plots, town blocks, or plot groups for a player.
     //
     // @Description
-    // This command integrates with Towny to claim land for a specific player.
+    // Mirrors Towny's TownCommand claim behavior (pre-events, economy) for town claims,
+    // but without sending chat output. Plot/group claims are delegated to PlotClaim.
     //
-    // The first argument chooses what to claim:
-    // - town: claims Town blocks for the player's town (similar to /town claim).
-    // - plot: claims individual plots for the player as a resident.
-    // - group: claims all plots in a Towny's plot group.
-    //
-    // The 'selection' argument is a list of locations that will be converted to Towny
-    // coordinates and claimed. This is usually produced by a cuboid or other region
-    // selection in Denizen.
-    //
-    // The 'target' argument specifies which player to use as the Towny resident/town
-    // member. The target must be online and a valid Towny resident.
-    //
-    // The 'admin' argument, when true, lets Town claims bypass normal Towny checks
-    // where supported, similar to using Towny's admin claim commands. When false,
-    // the command runs Towny's own claimability checks and will fail with the same
-    // messages a player would see from Towny.
-    //
-    // All Towny operations are run asynchronously via the Towny scheduler.
-    //
-    // @Tags
-    // <PlayerTag.towny.*>
-    //
-    // @Usage
-    // Use to claim a selected region as the player's town blocks.
-    // - claim town selection:<server.selected_region> target:<player>
-    //
-    // @Usage
-    // Use to claim a list of plots for a resident in admin mode.
-    // - claim plot selection:<[plot_locations]> target:<player> admin:true
-    //
-    // @Usage
-    // Use to claim all plots in a plot group, based on a location in that group.
-    // - claim group selection:<[some_location_in_group]> target:<player>
+    // Saves:
+    // - result: "success" or "failure"
     //
     // -->
 
@@ -90,23 +61,27 @@ public class ClaimCommand extends AbstractCommand {
                                    @ArgName("outpost") @ArgPrefixed @ArgDefaultNull boolean outpost) {
 
         if (selection == null || selection.isEmpty()) {
+            scriptEntry.saveObject("result", new ElementTag("failure"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Must specify a selection!");
         }
 
         Towny towny = (Towny) Bukkit.getPluginManager().getPlugin("Towny");
         if (towny == null || !towny.isEnabled()) {
+            scriptEntry.saveObject("result", new ElementTag("failure"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Towny is not loaded or not enabled.");
         }
 
         if (target == null) {
+            scriptEntry.saveObject("result", new ElementTag("failure"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Must specify a target:<player>.");
         }
 
         Player player = target.getPlayerEntity();
         if (player == null || !player.isOnline()) {
+            scriptEntry.saveObject("result", new ElementTag("failure"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Target player must be online.");
         }
@@ -114,6 +89,7 @@ public class ClaimCommand extends AbstractCommand {
         TownyAPI api = TownyAPI.getInstance();
         Resident resident = api.getResident(player);
         if (resident == null) {
+            scriptEntry.saveObject("result", new ElementTag("failure"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Target player is not a Towny resident.");
         }
@@ -126,45 +102,43 @@ public class ClaimCommand extends AbstractCommand {
 
         switch (action) {
             case PLOT -> {
-                // No dedicated TownyAPI "test" helper for plots – let PlotClaim handle its own checks.
+                // Plot claims: let PlotClaim handle its own checks and events.
                 runnable = new PlotClaim(towny, player, resident, coords, true, admin, false);
             }
             case TOWN -> {
                 Town town = api.getTown(player);
                 if (town == null) {
+                    scriptEntry.saveObject("result", new ElementTag("failure"));
                     scriptEntry.setFinished(true);
                     throw new InvalidArgumentsRuntimeException("Target player does not have a town.");
                 }
 
-                // Use Towny's own claimability checks when not in admin mode.
-                if (!admin) {
-                    for (WorldCoord coord : coords) {
-                        try {
-                            // outpost = false, newTown = false
-                            api.testTownClaimOrThrow(town, coord, outpost, false);
-                        }
-                        catch (TownyException ex) {
-                            scriptEntry.setFinished(true);
-                            // reuse Towny's message so behavior matches /town claim
-                            throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
-                        }
-                    }
+                try {
+                    // Town-like checks, events, and economy for non-admin claims.
+                    DepenizenTownyCommandHelper.verifyTownClaim(player, town, coords, outpost, admin);
+                }
+                catch (TownyException ex) {
+                    scriptEntry.saveObject("result", new ElementTag("failure"));
+                    scriptEntry.setFinished(true);
+                    throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
                 }
 
-                runnable = new TownClaim(towny, player, town, coords, false, true, admin);
+                // (plugin, player, town, selection, outpost, claim=true, forced=admin)
+                runnable = new TownClaim(towny, player, town, coords, outpost, true, admin);
             }
             case GROUP -> {
-                // Same as plot, but groupClaim=true.
-                // No TownyAPI helper for plot-group claims either, so no extra test here.
+                // Group claims: same as plot, but groupClaim=true.
                 runnable = new PlotClaim(towny, player, resident, coords, true, admin, true);
             }
             default -> {
+                scriptEntry.saveObject("result", new ElementTag("failure"));
                 scriptEntry.setFinished(true);
                 throw new InvalidArgumentsRuntimeException("Unknown towny target: " + action);
             }
         }
 
         Bukkit.getScheduler().runTaskAsynchronously(towny, runnable);
+        scriptEntry.saveObject("result", new ElementTag("success"));
         scriptEntry.setFinished(true);
     }
 }

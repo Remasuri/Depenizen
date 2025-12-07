@@ -19,6 +19,7 @@ import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 
+import com.denizenscript.depenizen.bukkit.events.new_events.DepenizenPlotGroupUpdatedEvent;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.object.*;
@@ -777,6 +778,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 }
             }
             plotGroup.setTownblocks(new ArrayList<>(newBlocks));
+            Bukkit.getPluginManager().callEvent(new DepenizenPlotGroupUpdatedEvent(plotGroup));
             dataSource.savePlotGroup(plotGroup);
         }
     }
