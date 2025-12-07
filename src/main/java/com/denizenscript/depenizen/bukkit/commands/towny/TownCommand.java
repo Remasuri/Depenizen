@@ -13,13 +13,20 @@ import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
+import com.palmergames.bukkit.towny.event.DeleteTownEvent;
+import com.palmergames.bukkit.towny.event.NewTownEvent;
+import com.palmergames.bukkit.towny.event.PreDeleteTownEvent;
+import com.palmergames.bukkit.towny.event.PreNewTownEvent;
 import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
 import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.TownyWorld;
 import com.palmergames.bukkit.towny.object.WorldCoord;
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 /**
@@ -136,6 +143,23 @@ public class TownCommand extends AbstractCommand {
                     return;
                 }
 
+                // --- Fire Towny's PreNewTownEvent and allow other plugins to cancel or adjust price ---
+                double price = TownySettings.getNewTownPrice();
+                PreNewTownEvent preEvent = new PreNewTownEvent(
+                        player,
+                        name,
+                        homeLoc,
+                        price
+                );
+                Bukkit.getPluginManager().callEvent(preEvent);
+
+                if (preEvent.isCancelled()) {
+                    // Creation is vetoed by another plugin / listener
+                    scriptEntry.saveObject("result", new ElementTag("failure"));
+                    scriptEntry.setFinished(true);
+                    return;
+                }
+
                 try {
                     // --- Create town via Towny's datasource ---
                     universe.newTown(name);
@@ -145,8 +169,7 @@ public class TownCommand extends AbstractCommand {
                     resident.setTown(town);
                     town.setMayor(resident);
 
-                    // Create the initial TownBlock as the homeblock,
-                    // following the pattern used by TownClaim: new TownBlock(x, z, townyWorld)
+                    // Create the initial TownBlock as the homeblock
                     TownBlock townBlock = new TownBlock(worldCoord.getX(), worldCoord.getZ(), townyWorld);
                     townBlock.setTown(town);
                     universe.getDataSource().saveTownBlock(townBlock);
@@ -158,6 +181,9 @@ public class TownCommand extends AbstractCommand {
                     // Persist town + resident
                     universe.getDataSource().saveTown(town);
                     universe.getDataSource().saveResident(resident);
+
+                    // Fire Towny's NewTownEvent after successful creation
+                    Bukkit.getPluginManager().callEvent(new NewTownEvent(town));
 
                     // Output for Denizen
                     scriptEntry.saveObject("created_town", new TownTag(town));
@@ -193,9 +219,53 @@ public class TownCommand extends AbstractCommand {
                     throw new InvalidArgumentsRuntimeException("Must specify a valid town:<town> or name:<name> to delete.");
                 }
 
+                // Determine the sender for the events (player if available, otherwise console)
+                CommandSender sender = null;
+                PlayerTag linkedPlayerTag = Utilities.getEntryPlayer(scriptEntry);
+                if (linkedPlayerTag != null) {
+                    Player linkedPlayer = linkedPlayerTag.getPlayerEntity();
+                    if (linkedPlayer != null && linkedPlayer.isOnline()) {
+                        sender = linkedPlayer;
+                    }
+                }
+                if (sender == null) {
+                    sender = Bukkit.getConsoleSender();
+                }
+
+                // Work out an appropriate cause
+                DeleteTownEvent.Cause cause;
+                if (sender instanceof Player playerSender) {
+                    Resident senderResident = api.getResident(playerSender);
+                    // If the sender is the mayor, treat it as a normal command, otherwise as an admin command
+                    if (senderResident != null && town.getMayor() != null && town.getMayor().equals(senderResident)) {
+                        cause = DeleteTownEvent.Cause.COMMAND;
+                    }
+                    else {
+                        cause = DeleteTownEvent.Cause.ADMIN_COMMAND;
+                    }
+                }
+                else {
+                    cause = DeleteTownEvent.Cause.ADMIN_COMMAND;
+                }
+
+                // --- Fire Towny's PreDeleteTownEvent and allow cancellation ---
+                PreDeleteTownEvent preDeleteEvent = new PreDeleteTownEvent(town, cause, sender);
+                Bukkit.getPluginManager().callEvent(preDeleteEvent);
+
+                if (preDeleteEvent.isCancelled()) {
+                    scriptEntry.saveObject("result", new ElementTag("failure"));
+                    scriptEntry.setFinished(true);
+                    return;
+                }
+
                 try {
                     // Use Towny's own datasource deleteTown, which handles townblocks etc.
                     universe.getDataSource().deleteTown(town);
+
+                    // Fire Towny's DeleteTownEvent after deletion
+                    Resident mayor = town.getMayor(); // may be null, event handles that
+                    Bukkit.getPluginManager().callEvent(new DeleteTownEvent(town, mayor, cause, sender));
+
                     scriptEntry.saveObject("result", new ElementTag("success"));
                     scriptEntry.setFinished(true);
                 }

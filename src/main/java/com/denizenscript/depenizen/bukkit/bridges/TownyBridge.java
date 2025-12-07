@@ -127,7 +127,7 @@ public class TownyBridge extends Bridge {
             event.setReplacedObject(towns.getObjectAttribute(attribute.fulfill(1)));
         }
         // <--[tag]
-        // @attribute <towny.townBlockSize>
+        // @attribute <towny.town_block_size>
         // @returns ElementTag(Number)
         // @plugin Depenizen, Towny
         // @description
