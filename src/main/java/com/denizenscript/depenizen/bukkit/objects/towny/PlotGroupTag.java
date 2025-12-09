@@ -12,6 +12,7 @@ import com.denizenscript.denizencore.objects.ArgumentHelper;
 import com.denizenscript.denizencore.objects.Fetchable;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
@@ -20,10 +21,13 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 
 import com.denizenscript.depenizen.bukkit.events.new_events.DepenizenPlotGroupUpdatedEvent;
+import com.denizenscript.depenizen.bukkit.utilities.towny.TownyManagementHelpers;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyUniverse;
+import com.palmergames.bukkit.towny.event.plot.PlayerChangePlotTypeEvent;
 import com.palmergames.bukkit.towny.object.*;
 
+import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -371,6 +375,9 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
 
             return new ElementTag(value);
         });
+        tagProcessor.registerTag(ElementTag.class,"get_permissions_raw",(attribute,object) -> {
+            return new ElementTag(object.plotGroup.getPermissions().toString());
+        });
     }
 
     @Override
@@ -429,75 +436,47 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
 
-            // Map group+action to TownyPermission key
             String key;
             switch (group) {
                 case "resident":
-                case "friend": // alias
+                case "friend":
                     switch (action) {
-                        case "build":
-                            key = "residentbuild";
-                            break;
-                        case "destroy":
-                            key = "residentdestroy";
-                            break;
-                        case "switch":
-                            key = "residentswitch";
-                            break;
+                        case "build":   key = "residentbuild";   break;
+                        case "destroy": key = "residentdestroy"; break;
+                        case "switch":  key = "residentswitch";  break;
                         case "itemuse":
-                        case "item_use":
-                            key = "residentitemuse";
-                            break;
+                        case "item_use": key = "residentitemuse"; break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
                             return;
                     }
                     break;
-
                 case "ally":
                 case "allies":
                     switch (action) {
-                        case "build":
-                            key = "allybuild";
-                            break;
-                        case "destroy":
-                            key = "allydestroy";
-                            break;
-                        case "switch":
-                            key = "allyswitch";
-                            break;
+                        case "build":   key = "allybuild";   break;
+                        case "destroy": key = "allydestroy"; break;
+                        case "switch":  key = "allyswitch";  break;
                         case "itemuse":
-                        case "item_use":
-                            key = "allyitemuse";
-                            break;
+                        case "item_use": key = "allyitemuse"; break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
                             return;
                     }
                     break;
-
                 case "outsider":
                 case "outsiders":
                     switch (action) {
-                        case "build":
-                            key = "outsiderbuild";
-                            break;
-                        case "destroy":
-                            key = "outsiderdestroy";
-                            break;
-                        case "switch":
-                            key = "outsiderswitch";
-                            break;
+                        case "build":   key = "outsiderbuild";   break;
+                        case "destroy": key = "outsiderdestroy"; break;
+                        case "switch":  key = "outsiderswitch";  break;
                         case "itemuse":
-                        case "item_use":
-                            key = "outsideritemuse";
-                            break;
+                        case "item_use": key = "outsideritemuse"; break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
                             return;
                     }
                     break;
-
                 default:
                     mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
                     return;
@@ -506,9 +485,9 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             try {
                 // 1) Set on the PlotGroup permissions object itself
                 perms.set(key, value);
-                dataSource.savePlotGroup(plotGroup);
+                plotGroup.save();
 
-                // 2) Mimic '/plot group set perm' => apply to all TownBlocks in this group
+                // 2) Apply to all TownBlocks in this group
                 for (TownBlock townBlock : plotGroup.getTownBlocks()) {
                     if (townBlock == null) {
                         continue;
@@ -518,7 +497,8 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                         continue;
                     }
                     blockPerms.set(key, value);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
             }
             catch (Exception ex) {
@@ -545,12 +525,11 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
 
             // Apply to *all* townblocks in this plotgroup, like /plot group toggle pvp
             for (TownBlock townBlock : plotGroup.getTownBlocks()) {
-                TownyPermission blockPerms = townBlock.getPermissions();
-                blockPerms.set("pvp", value);
-                dataSource.saveTownBlock(townBlock);
+                townBlock.getPermissions().pvp = value;
+                townBlock.setChanged(true);
+                townBlock.save();
             }
-
-            dataSource.savePlotGroup(plotGroup);
+            plotGroup.save();
         }
         // <--[mechanism]
         // @object PlotGroupTag
@@ -569,11 +548,11 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             groupPerms.set("fire", value);
 
             for (TownBlock townBlock : plotGroup.getTownBlocks()) {
-                TownyPermission blockPerms = townBlock.getPermissions();
-                blockPerms.set("fire", value);
-                dataSource.saveTownBlock(townBlock);
+                townBlock.getPermissions().fire = value;
+                townBlock.setChanged(true);
+                townBlock.save();
             }
-            dataSource.savePlotGroup(plotGroup);
+            plotGroup.save();
         }
         // <--[mechanism]
         // @object PlotGroupTag
@@ -589,13 +568,13 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             boolean value = mechanism.getValue().asBoolean();
             TownyPermission groupPerms = plotGroup.getPermissions();
             groupPerms.set("explosion", value);
-
+            //plotGroup.setPermissions(groupPerms.toString());
             for (TownBlock townBlock : plotGroup.getTownBlocks()) {
-                TownyPermission blockPerms = townBlock.getPermissions();
-                blockPerms.set("explosion", value);
-                dataSource.saveTownBlock(townBlock);
+                townBlock.getPermissions().explosion = value;
+                townBlock.setChanged(true);
+                townBlock.save();
             }
-            dataSource.savePlotGroup(plotGroup);
+            plotGroup.save();
         }
         // <--[mechanism]
         // @object PlotGroupTag
@@ -613,11 +592,11 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             groupPerms.set("mobs", value);
 
             for (TownBlock townBlock : plotGroup.getTownBlocks()) {
-                TownyPermission blockPerms = townBlock.getPermissions();
-                blockPerms.set("mobs", value);
-                dataSource.saveTownBlock(townBlock);
+                townBlock.getPermissions().mobs = value;
+                townBlock.setChanged(true);
+                townBlock.save();
             }
-            dataSource.savePlotGroup(plotGroup);
+            plotGroup.save();
         }
         // <--[mechanism]
         // @object PlotGroupTag
@@ -630,13 +609,17 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <PlotGroupTag.towny_type>
         // -->
-        if(mechanism.matches("towny_type")){
+        if (mechanism.matches("towny_type")) {
             String typeString = mechanism.getValue().asString();
             String lower = typeString.toLowerCase();
             TownBlockType type = TownBlockTypeHandler.getType(lower);
-            for(TownBlock townBlock : plotGroup.getTownBlocks()){
+            for (TownBlock townBlock : plotGroup.getTownBlocks()) {
+                if (townBlock.getType() == type) {
+                    continue; // no change
+                }
                 townBlock.setType(type);
-                dataSource.saveTownBlock(townBlock);
+                townBlock.setChanged(true);
+                townBlock.save();
             }
         }
         // <--[mechanism]
@@ -657,6 +640,11 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             if(resident == null){
                 mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
                 return;
+            }
+            for (TownBlock tb : plotGroup.getTownBlocks()) {
+                tb.addTrustedResident(resident);
+                tb.setChanged(true);
+                tb.save();
             }
             plotGroup.addTrustedResident(resident);
             dataSource.savePlotGroup(plotGroup);
@@ -679,6 +667,11 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             if(resident == null){
                 mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
                 return;
+            }
+            for (TownBlock tb : plotGroup.getTownBlocks()) {
+                tb.removeTrustedResident(resident);
+                tb.setChanged(true);
+                tb.save();
             }
             plotGroup.removeTrustedResident(resident);
             dataSource.savePlotGroup(plotGroup);
@@ -736,12 +729,42 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         // and new blocks in the list will be added to the group.
         // -->
         if(mechanism.matches("townblocks")) {
+           /* ListTag input = mechanism.valueAsType(ListTag.class);
+            List<TownBlockTag> townBlockTags = input.filter(TownBlockTag.class, mechanism.context);
+            if(plotGroup == null){
+                mechanism.echoError("plotgroup is null?!");
+                return;
+            }
+            if (townBlockTags.isEmpty()) {
+                mechanism.echoError("townblocks mechanism requires a list of TownBlockTags.");
+                return;
+            }
+
+            List<TownBlock> newBlocks = new ArrayList<>();
+            for (TownBlockTag tbt : townBlockTags) {
+                TownBlock block = tbt.getTownBlock();
+                if (block == null) {
+                    mechanism.echoError("Found null townblock in townblocks list: " + tbt.identifySimple());
+                    continue;
+                }
+                newBlocks.add(block);
+                block.setPlotObjectGroup(plotGroup);
+                block.save();
+            }
+            plotGroup.setTownblocks(newBlocks);
+            plotGroup.save();
+*/
+
+
+
+
             ListTag input = mechanism.valueAsType(ListTag.class);
             List<TownBlockTag> townBlockTags = input.filter(TownBlockTag.class, mechanism.context);
             if (townBlockTags.isEmpty()) {
                 mechanism.echoError("townblocks mechanism requires a list of TownBlockTags.");
                 return;
             }
+            Town town = plotGroup.getTown();
             Set<TownBlock> newBlocks = new HashSet<>();
             for (TownBlockTag tbt : townBlockTags) {
                 TownBlock block = tbt.getTownBlock();
@@ -752,24 +775,18 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                 newBlocks.add(block);
             }
             Set<TownBlock> oldBlocks = new HashSet<>(plotGroup.getTownBlocks());
-            for (TownBlock oldBlock : oldBlocks) {
-                if (!newBlocks.contains(oldBlock)) {
-                    // Remove this group from the block
-                    try {
-                        oldBlock.removePlotObjectGroup();
-                        dataSource.saveTownBlock(oldBlock);
-                    }
-                    catch (Exception ex) {
-                        mechanism.echoError("Error removing plotgroup from townblock "
-                                + oldBlock.getWorldCoord() + ": " + ex.getMessage());
-                    }
-                }
-            }
             for (TownBlock newBlock : newBlocks) {
                 if (!oldBlocks.contains(newBlock)) {
                     try {
+                        var type = plotGroup.getTownBlockType();
+                     //   var oldType = newBlock.getType();
+                        newBlock.setType(type);
+                        newBlock.setPermissions(plotGroup.getPermissions().toString());
+                    //    BukkitTools.fireEvent(new PlayerChangePlotTypeEvent(type, oldType, newBlock, null));
                         newBlock.setPlotObjectGroup(plotGroup);
-                        dataSource.saveTownBlock(newBlock);
+                        newBlock.setChanged(true);
+                        newBlock.save();
+                        //TownyManagementHelpers.addTownBlockToPlotGroup(newBlock,plotGroup, null);
                     }
                     catch (Exception ex) {
                         mechanism.echoError("Error adding plotgroup to townblock "
@@ -777,9 +794,30 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                     }
                 }
             }
+            for (TownBlock oldBlock : oldBlocks) {
+                if (!newBlocks.contains(oldBlock)) {
+                    // Remove this group from the block
+                    try {
+                    //    var type = TownBlockType.RESIDENTIAL;
+                    //    var oldType = oldBlock.getType();
+                        oldBlock.removePlotObjectGroup();
+                        oldBlock.setType(TownBlockType.RESIDENTIAL);
+                        oldBlock.setPermissions(town.getPermissions().toString());
+                        oldBlock.setChanged(true);
+                        oldBlock.save();
+                    //    BukkitTools.fireEvent(new PlayerChangePlotTypeEvent(type, oldType, oldBlock, null));
+                    //    TownyManagementHelpers.removeTownBlockFromPlotGroup(oldBlock, plotGroup, null);
+                    }
+                    catch (Exception ex) {
+                        mechanism.echoError("Error removing plotgroup from townblock "
+                                + oldBlock.getWorldCoord() + ": " + ex.getMessage());
+                    }
+                }
+            }
             plotGroup.setTownblocks(new ArrayList<>(newBlocks));
-            Bukkit.getPluginManager().callEvent(new DepenizenPlotGroupUpdatedEvent(plotGroup));
-            dataSource.savePlotGroup(plotGroup);
+            plotGroup.save();
+            //Bukkit.getPluginManager().callEvent(new DepenizenPlotGroupUpdatedEvent(plotGroup));
+            //dataSource.savePlotGroup(plotGroup);
         }
     }
 }

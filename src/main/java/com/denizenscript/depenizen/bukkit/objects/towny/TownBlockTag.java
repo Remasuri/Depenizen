@@ -21,9 +21,12 @@ import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.object.*;
 
+import com.palmergames.bukkit.towny.utils.PlayerCacheUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 
 import java.util.UUID;
 
@@ -620,6 +623,71 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
 
             return new ElementTag(value);
         });
+        tagProcessor.registerTag(ElementTag.class,"get_permissions_raw",(attribute,object) -> {
+            return new ElementTag(object.townBlock.getPermissions().toString());
+        });
+        tagProcessor.registerTag(ElementTag.class,"has_permission",((attribute, object) -> {
+            if (!attribute.hasParam()) {
+                attribute.echoError("TownBlockTag.effective_can[...] requires input like '<player>.<action>' or '<player>.<action>.<material>'.");
+                return null;
+            }
+            String ctx = attribute.getParam();
+            String[] parts = ctx.split("\\.", 3);
+            if (parts.length < 2) {
+                attribute.echoError("TownBlockTag.effective_can[...] context must be '<player>.<action>' or '<player>.<action>.<material>'. Got: '" + ctx + "'");
+                return null;
+            }
+
+            PlayerTag playerTag = PlayerTag.valueOf(parts[0], attribute.context);
+            if (playerTag == null) {
+                attribute.echoError("Invalid player given to TownBlockTag.effective_can: '" + parts[0] + "'.");
+                return null;
+            }
+            Player bukkitPlayer = playerTag.getPlayerEntity();
+            if (bukkitPlayer == null) {
+                // Towny needs an online Player for cache checks
+                return new ElementTag(false);
+            }
+            String actionStr = CoreUtilities.toLowerCase(parts[1]);
+            TownyPermission.ActionType actionType;
+            switch (actionStr) {
+                case "build":
+                    actionType = TownyPermission.ActionType.BUILD;
+                    break;
+                case "destroy":
+                    actionType = TownyPermission.ActionType.DESTROY;
+                    break;
+                case "switch":
+                    actionType = TownyPermission.ActionType.SWITCH;
+                    break;
+                case "itemuse":
+                case "item_use":
+                    actionType = TownyPermission.ActionType.ITEM_USE;
+                    break;
+                default:
+                    attribute.echoError("Unknown action '" + actionStr + "'. Expected build/destroy/switch/itemuse.");
+                    return null;
+            }
+            Material material = Material.STONE; // neutral default
+            if (parts.length == 3) {
+                String matName = parts[2].toUpperCase(java.util.Locale.ROOT);
+                Material m = Material.matchMaterial(matName);
+                if (m != null) {
+                    material = m;
+                }
+                else {
+                    attribute.echoError("Unknown material '" + parts[2] + "', defaulting to STONE.");
+                }
+            }
+            Location location = object.townBlock.getWorldCoord().getLowerMostCornerLocation();
+            boolean allowed = PlayerCacheUtil.getCachePermission(
+                    bukkitPlayer,
+                    location,
+                    material,
+                    actionType
+            );
+            return new ElementTag(allowed);
+        }));
     }
 
     @Override
@@ -641,6 +709,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
     public void adjust(Mechanism mechanism) {
         TownyUniverse universe = TownyUniverse.getInstance();
         var dataSource = universe.getDataSource();
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name perm
@@ -684,17 +753,17 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                     case "friend": // optional alias if you want
                         switch (action) {
                             case "build":
-                                perms.set("residentbuild",value);
+                                perms.set("residentbuild", value);
                                 break;
                             case "destroy":
-                                perms.set("residentdestroy",value);
+                                perms.set("residentdestroy", value);
                                 break;
                             case "switch":
-                                perms.set("residentswitch",value);
+                                perms.set("residentswitch", value);
                                 break;
                             case "itemuse":
                             case "item_use":
-                                perms.set("residentitemuse",value);
+                                perms.set("residentitemuse", value);
                                 break;
                             default:
                                 mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
@@ -706,17 +775,17 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                     case "allies":
                         switch (action) {
                             case "build":
-                                perms.set("allybuild",value);
+                                perms.set("allybuild", value);
                                 break;
                             case "destroy":
-                                perms.set("allydestroy",value);
+                                perms.set("allydestroy", value);
                                 break;
                             case "switch":
-                                perms.set("allyswitch",value);
+                                perms.set("allyswitch", value);
                                 break;
                             case "itemuse":
                             case "item_use":
-                                perms.set("allyitemuse",value);
+                                perms.set("allyitemuse", value);
                                 break;
                             default:
                                 mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
@@ -728,17 +797,17 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                     case "outsiders":
                         switch (action) {
                             case "build":
-                                perms.set("outsiderbuild",value);
+                                perms.set("outsiderbuild", value);
                                 break;
                             case "destroy":
-                                perms.set("outsiderdestroy",value);
+                                perms.set("outsiderdestroy", value);
                                 break;
                             case "switch":
-                                perms.set("outsiderswitch",value);
+                                perms.set("outsiderswitch", value);
                                 break;
                             case "itemuse":
                             case "item_use":
-                                perms.set("outsideritemuse",value);
+                                perms.set("outsideritemuse", value);
                                 break;
                             default:
                                 mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
@@ -750,13 +819,15 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
                         mechanism.echoError("Unknown perm group '" + group + "'. Expected resident/ally/outsider.");
                         return;
                 }
-                dataSource.saveTownBlock(townBlock);
+                townBlock.setChanged(true);
+                townBlock.save();
             }
             catch (Exception ex) {
                 mechanism.echoError("Failed to set TownBlock permission '" + spec + "': " + ex.getMessage());
             }
             return;
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name has_pvp
@@ -767,11 +838,12 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.has_pvp>
         // -->
-        if(mechanism.matches("has_pvp")){
-            TownyPermission perms = townBlock.getPermissions();
-            perms.set("pvp",mechanism.getValue().asBoolean());
-            dataSource.saveTownBlock(townBlock);
+        if (mechanism.matches("has_pvp")) {
+            townBlock.getPermissions().pvp = mechanism.getValue().asBoolean();
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name has_firespread
@@ -783,11 +855,12 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.has_firespread>
         // -->
-        if(mechanism.matches("has_firespread")){
-            TownyPermission perms = townBlock.getPermissions();
-            perms.set("fire",mechanism.getValue().asBoolean());
-            dataSource.saveTownBlock(townBlock);
+        if (mechanism.matches("has_firespread")) {
+            townBlock.getPermissions().fire = mechanism.getValue().asBoolean();
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name has_explosions
@@ -798,11 +871,12 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.has_explosions>
         // -->
-        if(mechanism.matches("has_explosions")){
-            TownyPermission perms = townBlock.getPermissions();
-            perms.set("explosion",mechanism.getValue().asBoolean());
-            dataSource.saveTownBlock(townBlock);
+        if (mechanism.matches("has_explosions")) {
+            townBlock.getPermissions().explosion = mechanism.getValue().asBoolean();
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name has_mobs
@@ -813,11 +887,12 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.has_mobs>
         // -->
-        if(mechanism.matches("has_mobs")) {
-            TownyPermission perms = townBlock.getPermissions();
-            perms.set("mobs", mechanism.getValue().asBoolean());
-            dataSource.saveTownBlock(townBlock);
+        if (mechanism.matches("has_mobs")) {
+            townBlock.getPermissions().mobs = mechanism.getValue().asBoolean();
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name towny_type
@@ -829,12 +904,14 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.towny_type>
         // -->
-        if(mechanism.matches("towny_type")){
+        if (mechanism.matches("towny_type")) {
             String typeString = mechanism.getValue().asString();
             String lower = typeString.toLowerCase();
             townBlock.setType(lower);
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name name
@@ -845,10 +922,12 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.name>
         // -->
-        if(mechanism.matches("name")){
+        if (mechanism.matches("name")) {
             townBlock.setName(mechanism.getValue().asString());
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name add_trusted_resident
@@ -859,20 +938,22 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.trusted_residents>
         // -->
-        if(mechanism.matches("add_trusted_resident")){
+        if (mechanism.matches("add_trusted_resident")) {
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
                 mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
                 return;
             }
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
-            if(resident == null){
-                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident");
                 return;
             }
             townBlock.addTrustedResident(resident);
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name remove_trusted_resident
@@ -883,20 +964,22 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.trusted_residents>
         // -->
-        if(mechanism.matches("remove_trusted_resident")){
+        if (mechanism.matches("remove_trusted_resident")) {
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
                 mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
                 return;
             }
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
-            if(resident == null){
-                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident");
                 return;
             }
             townBlock.removeTrustedResident(resident);
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name resident
@@ -909,10 +992,11 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownBlockTag.resident>
         // -->
-        if(mechanism.matches("resident")) {
+        if (mechanism.matches("resident")) {
             if (mechanism.hasValue() && mechanism.getValue().asString().equalsIgnoreCase("none")) {
                 townBlock.setResident(null); // town-owned
-                dataSource.saveTownBlock(townBlock);
+                townBlock.setChanged(true);
+                townBlock.save();
                 return;
             }
 
@@ -923,8 +1007,10 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             }
             Resident resident = universe.getResident(player.getUUID());
             townBlock.setResident(resident);
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
+
         // <--[mechanism]
         // @object TownBlockTag
         // @name forsale_price
@@ -933,9 +1019,11 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         // @description
         // Sets the sale price of this townblock.
         // -->
-        if(mechanism.matches("forsale_price")){
+        if (mechanism.matches("forsale_price")) {
             townBlock.setPlotPrice(mechanism.getValue().asDouble());
-            dataSource.saveTownBlock(townBlock);
+            townBlock.setChanged(true);
+            townBlock.save();
         }
     }
+
 }

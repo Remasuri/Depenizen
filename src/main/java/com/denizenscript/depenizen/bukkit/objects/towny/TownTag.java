@@ -1,5 +1,13 @@
 package com.denizenscript.depenizen.bukkit.objects.towny;
 import com.denizenscript.denizencore.objects.core.MapTag;
+import com.palmergames.bukkit.towny.Towny;
+import com.palmergames.bukkit.towny.event.TownInvitePlayerEvent;
+import com.palmergames.bukkit.towny.exceptions.AlreadyRegisteredException;
+import com.palmergames.bukkit.towny.invites.Invite;
+import com.palmergames.bukkit.towny.invites.InviteHandler;
+import com.palmergames.bukkit.towny.invites.InviteReceiver;
+import com.palmergames.bukkit.towny.invites.InviteSender;
+import com.palmergames.bukkit.towny.invites.exceptions.TooManyInvitesException;
 import com.palmergames.bukkit.towny.object.TownyPermission;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizencore.DenizenCore;
@@ -18,15 +26,22 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagContext;
+import com.palmergames.bukkit.towny.object.inviteobjects.PlayerJoinTownInvite;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
+import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 
+import java.io.InvalidObjectException;
 import java.util.*;
 
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
+import org.bukkit.entity.Player;
+
+import static com.denizenscript.depenizen.bukkit.utilities.towny.TownyInviteHelpers.inviteToMapTag;
+
 public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
     // <--[ObjectType]
@@ -132,7 +147,6 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
     /////////////////////
     //   ObjectTag Methods
     /////////////////
-
     private String prefix = "Town";
 
     @Override
@@ -428,6 +442,45 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return list;
         });
 
+// <--[tag]
+// @attribute <TownTag.invites>
+// @returns ListTag(MapTag)
+// @plugin Depenizen, Towny
+// @description
+// Returns a list of MapTags describing all invites this town has SENT.
+// Each map can contain:
+// - direction: ElementTag("sent")
+// - sender_name, sender_uuid, sender_type
+// - sender_player: PlayerTag (if sender is a Resident with UUID)
+// - receiver_name, receiver_uuid, receiver_type
+// - receiver_player: PlayerTag (if receiver is a Resident with UUID)
+// - receiver_town: TownTag (if receiver is a Town)
+// - receiver_nation: NationTag (if receiver is a Nation)
+// - is_resident_invite, is_town_invite, is_nation_invite: ElementTag(Boolean)
+// -->
+        tagProcessor.registerTag(ListTag.class, "towny_invites", (attribute, object) -> {
+            ListTag list = new ListTag();
+            for (Invite invite : object.town.getSentInvites()) {
+                list.addObject(inviteToMapTag(invite));
+            }
+            return list;
+        });
+
+// <--[tag]
+// @attribute <TownTag.requests>
+// @returns ListTag(MapTag)
+// @plugin Depenizen, Towny
+// @description
+// Returns a list of MapTags describing all invites this town has RECEIVED.
+// Same structure as <TownTag.sent_invites>, with direction "received".
+// -->
+        tagProcessor.registerTag(ListTag.class, "towny_requests", (attribute, object) -> {
+            ListTag list = new ListTag();
+            for (Invite invite : object.town.getReceivedInvites()) {
+                list.addObject(inviteToMapTag(invite));
+            }
+            return list;
+        });
         // <--[tag]
         // @attribute <TownTag.size>
         // @returns ElementTag(Number)
@@ -841,6 +894,9 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
             return new ElementTag(value);
         });
+        tagProcessor.registerTag(ElementTag.class,"get_permissions_raw",(attribute,object) -> {
+            return new ElementTag(object.town.getPermissions().toString());
+        });
     }
 
     public static ObjectTagProcessor<TownTag> tagProcessor = new ObjectTagProcessor<>();
@@ -891,8 +947,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             String newName = mechanism.getValue().asString();
             try {
                 TownyAPI.getInstance().getDataSource().renameTown(town, newName);
-            }
-            catch (Exception ex) {
+            } catch (Exception ex) {
                 mechanism.echoError("Could not rename town: " + ex.getMessage());
             }
         }
@@ -906,7 +961,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.tag>
         // -->
-        if (mechanism.matches("tag")){
+        if (mechanism.matches("tag")) {
             town.setTag(mechanism.getValue().asString());
             dataSource.saveTown(town);
         }
@@ -920,7 +975,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.board>
         // -->
-        if(mechanism.matches("board")){
+        if (mechanism.matches("board")) {
             town.setBoard(mechanism.getValue().asString());
             dataSource.saveTown(town);
         }
@@ -952,13 +1007,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                     if (townBlock.hasResident()) {
                         continue; // skip resident-owned plots
                     }
-                }
-                catch (Exception ignored) {
+                } catch (Exception ignored) {
                 }
                 TownyPermission tbPerms = townBlock.getPermissions();
                 if (tbPerms != null) {
                     tbPerms.set("pvp", val);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
             }
 
@@ -990,13 +1045,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                     if (townBlock.hasResident()) {
                         continue;
                     }
-                }
-                catch (Exception ignored) {
+                } catch (Exception ignored) {
                 }
                 TownyPermission tbPerms = townBlock.getPermissions();
                 if (tbPerms != null) {
                     tbPerms.set("fire", val);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
             }
 
@@ -1027,13 +1082,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                     if (townBlock.hasResident()) {
                         continue;
                     }
-                }
-                catch (Exception ignored) {
+                } catch (Exception ignored) {
                 }
                 TownyPermission tbPerms = townBlock.getPermissions();
                 if (tbPerms != null) {
                     tbPerms.set("explosion", val);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
             }
 
@@ -1064,18 +1119,19 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                     if (townBlock.hasResident()) {
                         continue;
                     }
-                }
-                catch (Exception ignored) {
+                } catch (Exception ignored) {
                 }
                 TownyPermission tbPerms = townBlock.getPermissions();
                 if (tbPerms != null) {
                     tbPerms.set("mobs", val);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
             }
 
             dataSource.saveTown(town);
         }
+
         // <--[mechanism]
         // @object TownTag
         // @name is_public
@@ -1086,7 +1142,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.is_public>
         // -->
-        if(mechanism.matches("is_public")){
+        if (mechanism.matches("is_public")) {
             town.setPublic(mechanism.getValue().asBoolean());
             dataSource.saveTown(town);
         }
@@ -1100,7 +1156,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.is_open>
         // -->
-        if(mechanism.matches("is_open")){
+        if (mechanism.matches("is_open")) {
             town.setOpen(mechanism.getValue().asBoolean());
             dataSource.saveTown(town);
         }
@@ -1114,7 +1170,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.is_forsale>
         // -->
-        if(mechanism.matches("is_forsale")){
+        if (mechanism.matches("is_forsale")) {
             town.setForSale(mechanism.getValue().asBoolean());
             dataSource.saveTown(town);
         }
@@ -1128,7 +1184,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.forsale_price>
         // -->
-        if(mechanism.matches("forsale_price")){
+        if (mechanism.matches("forsale_price")) {
             town.setForSalePrice(mechanism.getValue().asDouble());
             dataSource.saveTown(town);
         }
@@ -1142,15 +1198,15 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.trusted_residents>
         // -->
-        if(mechanism.matches("add_trusted_resident")){
+        if (mechanism.matches("add_trusted_resident")) {
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
                 mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
                 return;
             }
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
-            if(resident == null){
-                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident");
                 return;
             }
             town.addTrustedResident(resident);
@@ -1166,15 +1222,15 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.trusted_residents>
         // -->
-        if(mechanism.matches("remove_trusted_resident")){
+        if (mechanism.matches("remove_trusted_resident")) {
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
                 mechanism.echoError("Trusted resident mechanisms require a valid PlayerTag.");
                 return;
             }
             Resident resident = TownyUniverse.getInstance().getResident(player.getUUID());
-            if(resident == null){
-                mechanism.echoError("Player '"+player.identifySimple() + "' is not a registered Towny resident");
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident");
                 return;
             }
             town.removeTrustedResident(resident);
@@ -1215,17 +1271,24 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
             TownyPermission perms = town.getPermissions();
 
-            // Helper to map (group,action) -> TownyPermission key
             String key;
             switch (group) {
                 case "resident":
                 case "friend":
                     switch (action) {
-                        case "build":   key = "residentbuild";   break;
-                        case "destroy": key = "residentdestroy"; break;
-                        case "switch":  key = "residentswitch";  break;
+                        case "build":
+                            key = "residentbuild";
+                            break;
+                        case "destroy":
+                            key = "residentdestroy";
+                            break;
+                        case "switch":
+                            key = "residentswitch";
+                            break;
                         case "itemuse":
-                        case "item_use": key = "residentitemuse"; break;
+                        case "item_use":
+                            key = "residentitemuse";
+                            break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'resident'.");
                             return;
@@ -1235,11 +1298,19 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 case "ally":
                 case "allies":
                     switch (action) {
-                        case "build":   key = "allybuild";   break;
-                        case "destroy": key = "allydestroy"; break;
-                        case "switch":  key = "allyswitch";  break;
+                        case "build":
+                            key = "allybuild";
+                            break;
+                        case "destroy":
+                            key = "allydestroy";
+                            break;
+                        case "switch":
+                            key = "allyswitch";
+                            break;
                         case "itemuse":
-                        case "item_use": key = "allyitemuse"; break;
+                        case "item_use":
+                            key = "allyitemuse";
+                            break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'ally'.");
                             return;
@@ -1249,11 +1320,19 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 case "outsider":
                 case "outsiders":
                     switch (action) {
-                        case "build":   key = "outsiderbuild";   break;
-                        case "destroy": key = "outsiderdestroy"; break;
-                        case "switch":  key = "outsiderswitch";  break;
+                        case "build":
+                            key = "outsiderbuild";
+                            break;
+                        case "destroy":
+                            key = "outsiderdestroy";
+                            break;
+                        case "switch":
+                            key = "outsiderswitch";
+                            break;
                         case "itemuse":
-                        case "item_use": key = "outsideritemuse"; break;
+                        case "item_use":
+                            key = "outsideritemuse";
+                            break;
                         default:
                             mechanism.echoError("Unknown action '" + action + "' for group 'outsider'.");
                             return;
@@ -1277,8 +1356,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                         if (townBlock.hasResident()) {
                             continue;
                         }
-                    }
-                    catch (Exception ex) {
+                    } catch (Exception ex) {
                         continue;
                     }
 
@@ -1287,10 +1365,10 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                         continue;
                     }
                     tbPerms.set(key, value);
-                    dataSource.saveTownBlock(townBlock);
+                    townBlock.setChanged(true);
+                    townBlock.save();
                 }
-            }
-            catch (Exception ex) {
+            } catch (Exception ex) {
                 mechanism.echoError("Failed to set Town perm '" + spec + "': " + ex.getMessage());
             }
             return;
@@ -1305,7 +1383,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.spawn>
         // -->
-        if(mechanism.matches("spawn")){
+        if (mechanism.matches("spawn")) {
             //TODO: Add Homeblock check and output error if this does not contain homeblock
             town.setSpawn(mechanism.valueAsType(LocationTag.class));
             dataSource.saveTown(town);
@@ -1320,10 +1398,82 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // @tags
         // <TownTag.spawn>
         // -->
-        if(mechanism.matches("homeblock")){
+        if (mechanism.matches("homeblock")) {
             TownBlockTag townblockTag = mechanism.valueAsType(TownBlockTag.class);
             town.setHomeBlock(townblockTag.townBlock);
             dataSource.saveTown(town);
+        }
+        // <--[mechanism]
+// @object TownTag
+// @name add_resident
+// @input PlayerTag
+// @plugin Depenizen, Towny
+// @description
+// Adds the specified player as a resident of this town.
+// This is a low-level operation: it does NOT perform safety checks
+// like "is the player already in a town?" – you should handle that
+// in your Denizen script before calling this.
+// @tags
+// <TownTag.residents>
+// <TownTag.player_count>
+// -->
+        if (mechanism.matches("add_resident")) {
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("add_resident mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Player bukkitPlayer = player.getPlayerEntity();
+            Resident resident = TownyAPI.getInstance().getResident(bukkitPlayer);
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+            try {
+
+
+                if (town.hasOutlaw(resident)) {
+                    town.removeOutlaw(resident);
+                }
+
+                resident.setTown(town);
+                Towny.getPlugin().deleteCache(resident);
+                resident.save();
+                town.save();
+            } catch (AlreadyRegisteredException exception) {
+                mechanism.echoError("Resident already in a town.");
+            }
+        }
+        // <--[mechanism]
+// @object TownTag
+// @name remove_resident
+// @input PlayerTag
+// @plugin Depenizen, Towny
+// @description
+// Removes the specified player from this town's residents.
+// Like add_resident, does not perform higher-level safety checks.
+// @tags
+// <TownTag.residents>
+// <TownTag.player_count>
+// -->
+        if (mechanism.matches("remove_resident")) {
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("remove_resident mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Player bukkitPlayer = player.getPlayerEntity();
+            Resident resident = TownyAPI.getInstance().getResident(bukkitPlayer);
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+            if (town.hasResident(resident)) {
+                resident.removeTown();
+            }
+            town.checkTownHasEnoughResidentsForNationRequirements();
+            resident.save();
+            town.save();
         }
     }
 }

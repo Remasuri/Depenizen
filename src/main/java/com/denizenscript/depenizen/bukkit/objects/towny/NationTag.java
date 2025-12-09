@@ -6,6 +6,8 @@ import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.flags.RedirectionFlagTracker;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.depenizen.bukkit.utilities.towny.TownyInviteHelpers;
+import com.palmergames.bukkit.towny.invites.Invite;
 import com.palmergames.bukkit.towny.object.Nation;
 import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.TownyUniverse;
@@ -166,7 +168,37 @@ public class NationTag implements ObjectTag, FlaggableObject {
             }
             return list;
         });
+// <--[tag]
+        // @attribute <NationTag.towny_invites>
+        // @returns ListTag(MapTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of MapTags for all Towny invites this nation has RECEIVED.
+        // Each MapTag is produced by TownyInviteHelpers.inviteToMapTag.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "towny_invites", (attribute, object) -> {
+            ListTag out = new ListTag();
+            for (Invite invite : object.nation.getReceivedInvites()) {
+                out.addObject(TownyInviteHelpers.inviteToMapTag(invite));
+            }
+            return out;
+        });
 
+        // <--[tag]
+        // @attribute <NationTag.towny_requests>
+        // @returns ListTag(MapTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of MapTags for all Towny invites/requests this nation has SENT.
+        // Each MapTag is produced by TownyInviteHelpers.inviteToMapTag.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "towny_requests", (attribute, object) -> {
+            ListTag out = new ListTag();
+            for (Invite invite : object.nation.getSentInvites()) {
+                out.addObject(TownyInviteHelpers.inviteToMapTag(invite));
+            }
+            return out;
+        });
         // <--[tag]
         // @attribute <NationTag.assistants>
         // @returns ListTag(PlayerTag)
