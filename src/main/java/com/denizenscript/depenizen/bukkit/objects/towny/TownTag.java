@@ -443,7 +443,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
 // <--[tag]
-// @attribute <TownTag.invites>
+// @attribute <TownTag.towny_invites>
 // @returns ListTag(MapTag)
 // @plugin Depenizen, Towny
 // @description
@@ -467,7 +467,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
 // <--[tag]
-// @attribute <TownTag.requests>
+// @attribute <TownTag.towny_requests>
 // @returns ListTag(MapTag)
 // @plugin Depenizen, Towny
 // @description
@@ -1210,7 +1210,8 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
             town.addTrustedResident(resident);
-            dataSource.saveTown(town);
+            town.save();
+            //dataSource.saveTown(town);
         }
         // <--[mechanism]
         // @object TownTag
@@ -1469,6 +1470,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
             if (town.hasResident(resident)) {
+                resident.removeTrustInTown(town);
                 resident.removeTown();
             }
             town.checkTownHasEnoughResidentsForNationRequirements();
