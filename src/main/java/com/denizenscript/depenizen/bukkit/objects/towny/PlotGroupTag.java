@@ -819,5 +819,55 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             //Bukkit.getPluginManager().callEvent(new DepenizenPlotGroupUpdatedEvent(plotGroup));
             //dataSource.savePlotGroup(plotGroup);
         }
+        if (mechanism.matches("clear_owner")) {
+
+            Resident targetResident = null;
+
+            // Did the mechanism receive a player argument?
+            if (mechanism.hasValue()) {
+                PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+                if (player == null) {
+                    mechanism.echoError("clear_owner mechanism requires a valid PlayerTag when a value is specified.");
+                    return;
+                }
+
+                targetResident = TownyAPI.getInstance().getResident(player.getUUID());
+                if (targetResident == null) {
+                    mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                    return;
+                }
+
+                // Must match current owner
+                if (!plotGroup.hasResident() || !plotGroup.getResident().equals(targetResident)) {
+                    mechanism.echoError("clear_owner: " + player.identifySimple() + " is not the current owner of this plotgroup.");
+                    return;
+                }
+            }
+            else {
+                // No argument → default to current owner
+                if (!plotGroup.hasResident()) {
+                    mechanism.echoError("clear_owner: This plotgroup has no owner to clear.");
+                    return;
+                }
+            }
+
+            // Clear ownership
+            plotGroup.setResident(null);
+            plotGroup.save();
+        }
+        if(mechanism.matches("set_owner")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("set_owner mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+            plotGroup.setResident(resident);
+            plotGroup.save();
+        }
     }
 }

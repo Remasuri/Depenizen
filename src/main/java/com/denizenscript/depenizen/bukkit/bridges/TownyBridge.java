@@ -20,6 +20,7 @@ import com.denizenscript.depenizen.bukkit.Bridge;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyPlayerProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyWorldProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
+import com.denizenscript.depenizen.bukkit.properties.utilities.BukkitPlayerProperties;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.object.Nation;
 import com.palmergames.bukkit.towny.object.Town;
@@ -55,6 +56,7 @@ public class TownyBridge extends Bridge {
         ObjectFetcher.registerWithObjectFetcher(TownBlockTag.class,TownBlockTag.tagProcessor);
         ObjectFetcher.registerWithObjectFetcher(PlotGroupTag.class, PlotGroupTag.tagProcessor);
         PropertyParser.registerProperty(TownyPlayerProperties.class, PlayerTag.class);
+        PropertyParser.registerProperty(BukkitPlayerProperties.class, PlayerTag.class);
         TownyLocationProperties.register();
         PropertyParser.registerProperty(TownyCuboidProperties.class, CuboidTag.class);
         PropertyParser.registerProperty(TownyWorldProperties.class, WorldTag.class);

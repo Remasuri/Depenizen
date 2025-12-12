@@ -236,7 +236,96 @@ public class TownyPlayerProperties implements Property {
             return out.getObjectAttribute(attribute.fulfill(1));
         }
 
-        // ... rest of your existing tag handlers preserved exactly.
+        // <--[tag]
+        // @attribute <PlayerTag.mode_list>
+        // @returns ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the player's towny modes as a list.
+        // -->
+        else if (attribute.startsWith("mode_list")) {
+            ListTag modes = new ListTag();
+            for (String mode : getResident().getModes()) {
+                modes.addObject(new ElementTag(mode));
+            }
+            return modes.getObjectAttribute(attribute.fulfill(1));
+        }
+
+        // <--[tag]
+        // @attribute <PlayerTag.nation_ranks>
+        // @returns ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the player's nation ranks.
+        // -->
+        else if (attribute.startsWith("nation_ranks")) {
+            ListTag ranks = new ListTag();
+            for (String rank : getResident().getNationRanks()) {
+                ranks.addObject(new ElementTag(rank));
+            }
+            return ranks.getObjectAttribute(attribute.fulfill(1));
+        }
+
+        // <--[tag]
+        // @attribute <PlayerTag.nation>
+        // @returns NationTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the player's nation.
+        // -->
+        if (attribute.startsWith("nation")) {
+            try {
+                if (getResident().hasNation()) {
+                    return new NationTag(getResident().getTown().getNation()).getObjectAttribute(attribute.fulfill(1));
+                }
+                else {
+                    return null;
+                }
+            }
+            catch (NotRegisteredException e) {
+                if (!attribute.hasAlternative()) {
+                    Debug.echoError("'" + player.getName() + "' is not registered to a nation in Towny!");
+                }
+            }
+        }
+
+        // <--[tag]
+        // @attribute <PlayerTag.town_ranks>
+        // @returns ListTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the player's town ranks.
+        // -->
+        else if (attribute.startsWith("town_ranks")) {
+            ListTag ranks = new ListTag();
+            for (String rank : getResident().getTownRanks()) {
+                ranks.addObject(new ElementTag(rank));
+            }
+            return ranks.getObjectAttribute(attribute.fulfill(1));
+        }
+
+        // <--[tag]
+        // @attribute <PlayerTag.town>
+        // @returns TownTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the player's town.
+        // -->
+        if (attribute.startsWith("town")) {
+            try {
+                if (getResident().hasTown()) {
+                    return new TownTag(getResident().getTown()).getObjectAttribute(attribute.fulfill(1));
+                }
+                else {
+                    return null;
+                }
+            }
+            catch (NotRegisteredException e) {
+                if (!attribute.hasAlternative()) {
+                    Debug.echoError("'" + player.getName() + "' is not registered to a town in Towny!");
+                }
+            }
+        }
 
         return null;
     }

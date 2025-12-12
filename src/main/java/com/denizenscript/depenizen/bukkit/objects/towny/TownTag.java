@@ -1235,7 +1235,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return;
             }
             town.removeTrustedResident(resident);
-            dataSource.saveTown(town);
+            town.save();
         }
         // <--[mechanism]
         // @object TownTag
@@ -1424,8 +1424,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("add_resident mechanism requires a valid PlayerTag.");
                 return;
             }
-            Player bukkitPlayer = player.getPlayerEntity();
-            Resident resident = TownyAPI.getInstance().getResident(bukkitPlayer);
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
             if (resident == null) {
                 mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
                 return;
@@ -1463,19 +1462,57 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("remove_resident mechanism requires a valid PlayerTag.");
                 return;
             }
-            Player bukkitPlayer = player.getPlayerEntity();
-            Resident resident = TownyAPI.getInstance().getResident(bukkitPlayer);
+
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
             if (resident == null) {
                 mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
                 return;
             }
             if (town.hasResident(resident)) {
-                resident.removeTrustInTown(town);
                 resident.removeTown();
             }
             town.checkTownHasEnoughResidentsForNationRequirements();
             resident.save();
             town.save();
         }
+        // <--[mechanism]
+        // @object TownTag
+        // @name mayor
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the mayor of this town to the specified player.
+        // The player must be a registered Towny resident and already belong to this town.
+        // @tags
+        // <TownTag.mayor>
+        // -->
+        if (mechanism.matches("mayor")) {
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("mayor mechanism requires a valid PlayerTag.");
+                return;
+            }
+
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+
+            if (!town.hasResident(resident)) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a resident of town '" + town.getName() + "'.");
+                return;
+            }
+
+            try {
+                town.setMayor(resident);
+                resident.save();
+                town.save();
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Could not set mayor: " + ex.getMessage());
+            }
+        }
     }
+
 }
