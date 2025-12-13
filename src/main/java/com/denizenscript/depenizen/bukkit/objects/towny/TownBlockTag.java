@@ -82,8 +82,8 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         }
 
         // Fallback: legacy "world;x;z"
-        if (parts == null && string.contains(";")) {
-            String[] split = string.split(";", 3);
+        if (parts == null && string.contains(",")) {
+            String[] split = string.split(",", 3);
             if (split.length == 3) {
                 parts = split;
             }
@@ -166,7 +166,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
     @Override
     public String identify() {
         WorldCoord coord = getCoord();
-        return "townblock@" + coord.getWorldName() + ";" + coord.getX() + ";" + coord.getZ();
+        return "townblock@" + coord.getWorldName() + "," + coord.getX() + "," + coord.getZ();
     }
 
     @Override
@@ -186,7 +186,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
     @Override
     public AbstractFlagTracker getFlagTracker() {
         WorldCoord coord = getCoord();
-        String key = coord.getWorldName() + ";" + coord.getX() + ";" + coord.getZ();
+        String key = coord.getWorldName() + "," + coord.getX() + "," + coord.getZ();
         return new RedirectionFlagTracker(DenizenCore.serverFlagMap,
                 "__depenizen_towny_townblocks." + key);
     }
