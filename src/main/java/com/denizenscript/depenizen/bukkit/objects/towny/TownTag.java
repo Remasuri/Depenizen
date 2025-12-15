@@ -40,6 +40,8 @@ import java.util.*;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
 import org.bukkit.entity.Player;
 
+import javax.swing.text.Element;
+
 import static com.denizenscript.depenizen.bukkit.utilities.towny.TownyInviteHelpers.inviteToMapTag;
 
 public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
@@ -409,6 +411,8 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(TownBlockTag.class,"homeblock",((attribute, object) -> {
             return new TownBlockTag(object.town.getHomeBlockOrNull());
         }));
+
+
         // <--[tag]
         // @attribute <TownTag.player_count>
         // @returns ElementTag(Number)
@@ -530,7 +534,20 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "taxes", (attribute, object) -> {
             return new ElementTag(object.town.getTaxes());
         });
-
+        // <--[tag]
+        // @attribute <TownTag.outlaws>
+        // @returns ListTag(PlayerTag)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns a list of the town's outlaws
+        // -->
+        tagProcessor.registerTag(ListTag.class,"outlaws",(attribute,object) -> {
+            ListTag outlaws = new ListTag();
+            for (Resident resident : object.town.getOutlaws()) {
+                outlaws.addObject(new PlayerTag(resident.getUUID()));
+            }
+            return outlaws;
+        });
         // <--[tag]
         // @attribute <TownTag.outposts>
         // @returns ListTag(LocationTag)
@@ -1094,6 +1111,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
             dataSource.saveTown(town);
         }
+
         // <--[mechanism]
         // @object TownTag
         // @name has_mobs
@@ -1187,6 +1205,48 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         if (mechanism.matches("forsale_price")) {
             town.setForSalePrice(mechanism.getValue().asDouble());
             dataSource.saveTown(town);
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name plottax
+        // @input ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the plot tax that residents pay in this town
+        // @tags
+        // <TownTag.plottax>
+        // -->
+        if(mechanism.matches("plottax")){
+            town.setPlotTax(mechanism.getValue().asDouble());
+            town.save();
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name taxes
+        // @input ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets the tax that residents pay in this town
+        // @tags
+        // <TownTag.taxes>
+        // -->
+        if(mechanism.matches("taxes")){
+            town.setTaxes(mechanism.getValue().asDouble());
+            town.save();
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name has_taxpercent
+        // @input ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Sets if the taxes should be treated as percentages
+        // @tags
+        // <TownTag.has_taxpercent>
+        // -->
+        if(mechanism.matches("has_taxpercent")){
+            town.setTaxPercentage(mechanism.getValue().asBoolean());
+            town.save();
         }
         // <--[mechanism]
         // @object TownTag
@@ -1474,6 +1534,66 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             town.checkTownHasEnoughResidentsForNationRequirements();
             resident.save();
             town.save();
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name add_outlaw
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Adds specified player as an outlaw to the town
+        // @tags
+        // <TownTag.mayor>
+        // -->
+        if(mechanism.matches("add_outlaw")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("add_outlaw mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+            try {
+                town.addOutlaw(resident);
+                resident.save();
+                town.save();
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Could not add outlaw: " + ex.getMessage());
+            }
+        }
+        // <--[mechanism]
+        // @object TownTag
+        // @name remove_outlaw
+        // @input PlayerTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Adds specified player as an outlaw to the town
+        // @tags
+        // <TownTag.mayor>
+        // -->
+        if(mechanism.matches("remove_outlaw")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("remove_outlaw mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+            try {
+                town.removeOutlaw(resident);
+                resident.save();
+                town.save();
+            }
+            catch (Exception ex) {
+                mechanism.echoError("Could not add outlaw: " + ex.getMessage());
+            }
         }
         // <--[mechanism]
         // @object TownTag

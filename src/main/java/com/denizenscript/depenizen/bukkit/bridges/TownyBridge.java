@@ -10,12 +10,9 @@ import com.denizenscript.depenizen.bukkit.commands.towny.PlotGroupCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.TownCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.UnclaimCommand;
 import com.denizenscript.depenizen.bukkit.events.towny.*;
-import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
-import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
+import com.denizenscript.depenizen.bukkit.objects.towny.*;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyCuboidProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyLocationProperties;
-import com.denizenscript.depenizen.bukkit.objects.towny.NationTag;
-import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
 import com.denizenscript.depenizen.bukkit.Bridge;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyPlayerProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyWorldProperties;
@@ -55,6 +52,7 @@ public class TownyBridge extends Bridge {
         ObjectFetcher.registerWithObjectFetcher(NationTag.class, NationTag.tagProcessor);
         ObjectFetcher.registerWithObjectFetcher(TownBlockTag.class,TownBlockTag.tagProcessor);
         ObjectFetcher.registerWithObjectFetcher(PlotGroupTag.class, PlotGroupTag.tagProcessor);
+        ObjectFetcher.registerWithObjectFetcher(WorldCoordTag.class, WorldCoordTag.tagProcessor);
         PropertyParser.registerProperty(TownyPlayerProperties.class, PlayerTag.class);
         PropertyParser.registerProperty(BukkitPlayerProperties.class, PlayerTag.class);
         TownyLocationProperties.register();
@@ -76,6 +74,12 @@ public class TownyBridge extends Bridge {
         ScriptEvent.registerScriptEvent(PlayerUnclaimsPlotScriptEvent.class);
         ScriptEvent.registerScriptEvent(PlotGroupRemovedScriptEvent.class);
         ScriptEvent.registerScriptEvent(PlotGroupUpdatedScriptEvent.class);
+        TagManager.registerTagHandler(ObjectTag.class, "worldcoord", (attribute) -> {
+            if(attribute.hasParam()){
+                return WorldCoordTag.valueOf(attribute.getParam(), attribute.context);
+            }
+            return null;
+        });
         TagManager.registerTagHandler(new TagRunnable.RootForm() {
             @Override
             public void run(ReplaceableTagEvent event) {
@@ -438,3 +442,11 @@ public class TownyBridge extends Bridge {
 
     }
 }
+
+
+
+
+
+
+
+
