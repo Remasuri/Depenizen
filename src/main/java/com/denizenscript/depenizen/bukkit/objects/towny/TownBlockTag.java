@@ -54,6 +54,19 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
     //  OBJECT FETCHER
     ////////////////
 
+    private static WorldCoord parseCoord(String world, String xText, String zText) {
+        int x;
+        int z;
+        try {
+            x = Integer.parseInt(xText);
+            z = Integer.parseInt(zText);
+        }
+        catch (NumberFormatException ex) {
+            return null;
+        }
+        return new WorldCoord(world, x, z);
+    }
+
     @Fetchable("townblock")
     public static TownBlockTag valueOf(String string, TagContext context) {
         if (string == null) {
@@ -64,51 +77,41 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             string = string.substring("townblock@".length());
         }
 
-        String[] parts = null;
+        WorldCoord coord = null;
 
-        // Try list format first: world|x|z  (from <location.towny_grid_location>)
-        try {
-            ListTag list = ListTag.valueOf(string, context);
-            if (list.size() == 3) {
-                parts = new String[] {
-                        list.get(0),
-                        list.get(1),
-                        list.get(2)
-                };
+        WorldCoordTag coordTag = WorldCoordTag.valueOf(string, context);
+        if (coordTag != null) {
+            coord = coordTag.getWorldCoord();
+        }
+
+        if (coord == null) {
+            try {
+                ListTag list = ListTag.valueOf(string, context);
+                if (list.size() == 3) {
+                    coord = parseCoord(list.get(0), list.get(1), list.get(2));
+                }
+            }
+            catch (Exception ignored) {
+                // fall through to other formats
             }
         }
-        catch (Exception ignored) {
-            // Not a list, we'll fall back
-        }
 
-        // Fallback: legacy "world;x;z"
-        if (parts == null && string.contains(",")) {
+        if (coord == null && string.contains(",")) {
             String[] split = string.split(",", 3);
             if (split.length == 3) {
-                parts = split;
+                coord = parseCoord(split[0], split[1], split[2]);
             }
         }
 
-        if (parts == null) {
+        if (coord == null) {
             return null;
         }
 
-        String worldName = parts[0];
-        World world = Bukkit.getWorld(worldName);
+        World world = Bukkit.getWorld(coord.getWorldName());
         if (world == null) {
             return null;
         }
 
-        int x, z;
-        try {
-            x = Integer.parseInt(parts[1]);
-            z = Integer.parseInt(parts[2]);
-        }
-        catch (NumberFormatException ex) {
-            return null;
-        }
-
-        WorldCoord coord = new WorldCoord(worldName, x, z);
         TownBlock townBlock = TownyAPI.getInstance().getTownBlock(coord);
         if (townBlock == null) {
             return null;

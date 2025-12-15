@@ -9,6 +9,7 @@ import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.PlotGroupTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
+import com.denizenscript.depenizen.bukkit.objects.towny.WorldCoordTag;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
@@ -93,23 +94,15 @@ public class TownyLocationProperties {
         });
 
         // <--[tag]
-        // @attribute <LocationTag.towny_grid_location>
-        // @returns ListTag
+        // @attribute <LocationTag.towny_worldcoord>
+        // @returns WorldCoordTag
         // @plugin Depenizen, Towny
         // @description
-        // Returns the Towny grid coordinates (world;X;Z) of this location.
-        // This uses Towny's configured town_block_size, so it will match the Towny plot grid
-        // even if the grid size was changed in the Towny config.
-        //
-        // The format is "world;x;z" (for example: "World;12;-7").
+        // Returns the Towny grid coordinates (world;X;Z) of this location as a WorldCoordTag.
         // -->
-        LocationTag.tagProcessor.registerTag(ListTag.class, "towny_grid_location", (attribute, location) -> {
+        LocationTag.tagProcessor.registerTag(WorldCoordTag.class, "towny_worldcoord", (attribute, location) -> {
             WorldCoord coord = WorldCoord.parseWorldCoord(location); // respects town_block_size
-            ListTag list = new ListTag();
-            list.addObject(new ElementTag(coord.getWorldName()));
-            list.addObject(new ElementTag(coord.getX()));
-            list.addObject(new ElementTag(coord.getZ()));
-            return list;
+            return new WorldCoordTag(coord);
         });
 
         // <--[tag]

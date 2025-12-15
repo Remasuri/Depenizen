@@ -4,11 +4,9 @@ import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.depenizen.bukkit.commands.noteblockapi.NBSCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.ClaimCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.PlotGroupCommand;
 import com.denizenscript.depenizen.bukkit.commands.towny.TownCommand;
-import com.denizenscript.depenizen.bukkit.commands.towny.UnclaimCommand;
 import com.denizenscript.depenizen.bukkit.events.towny.*;
 import com.denizenscript.depenizen.bukkit.objects.towny.*;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyCuboidProperties;
@@ -112,7 +110,6 @@ public class TownyBridge extends Bridge {
         }, "plotgroup");
         DenizenCore.commandRegistry.registerCommand(PlotGroupCommand.class);
         DenizenCore.commandRegistry.registerCommand(ClaimCommand.class);
-        DenizenCore.commandRegistry.registerCommand(UnclaimCommand.class);
         DenizenCore.commandRegistry.registerCommand(TownCommand.class);
     }
 

@@ -28,6 +28,7 @@ import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.palmergames.bukkit.towny.object.inviteobjects.PlayerJoinTownInvite;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
+import com.palmergames.bukkit.towny.utils.ProximityUtil;
 import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -43,6 +44,7 @@ import org.bukkit.entity.Player;
 import javax.swing.text.Element;
 
 import static com.denizenscript.depenizen.bukkit.utilities.towny.TownyInviteHelpers.inviteToMapTag;
+import static com.palmergames.bukkit.towny.command.TownCommand.isEdgeBlock;
 
 public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
@@ -470,20 +472,11 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return list;
         });
 
-// <--[tag]
-// @attribute <TownTag.towny_requests>
-// @returns ListTag(MapTag)
-// @plugin Depenizen, Towny
-// @description
-// Returns a list of MapTags describing all invites this town has RECEIVED.
-// Same structure as <TownTag.sent_invites>, with direction "received".
-// -->
-        tagProcessor.registerTag(ListTag.class, "towny_requests", (attribute, object) -> {
-            ListTag list = new ListTag();
-            for (Invite invite : object.town.getReceivedInvites()) {
-                list.addObject(inviteToMapTag(invite));
-            }
-            return list;
+        tagProcessor.registerTag(ElementTag.class, "has_unlimited_claims",(attribute, object) -> {
+            return new ElementTag(object.town.hasUnlimitedClaims());
+        });
+        tagProcessor.registerTag(ElementTag.class,"available_townblocks",(attribute, object) -> {
+            return new ElementTag(object.town.availableTownBlocks());
         });
         // <--[tag]
         // @attribute <TownTag.size>
@@ -855,10 +848,10 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         // For example: <[town].perm[resident.build]>
         // -->
         tagProcessor.registerTag(ElementTag.class, "perm", (attribute, object) -> {
-            if (!attribute.hasContext(1)) {
+            if (!attribute.hasParam()) {
                 return null;
             }
-            String spec = attribute.getContext(1); // e.g. "resident.build"
+            String spec = attribute.getParam(); // e.g. "resident.build"
             String[] parts = spec.split("\\.", 2);
             if (parts.length != 2) {
                 return null;
@@ -911,8 +904,106 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
 
             return new ElementTag(value);
         });
-        tagProcessor.registerTag(ElementTag.class,"get_permissions_raw",(attribute,object) -> {
-            return new ElementTag(object.town.getPermissions().toString());
+        // <--[tag]
+        // @attribute <TownTag.claim_cost>
+        // @returns ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the cost to claim a single townblock for this town.
+        //
+        // Equivalent to the town's configured "town block cost" in Towny.
+        // -->
+        //
+        // <--[tag]
+        // @attribute <TownTag.claim_cost[<amount>]>
+        // @returns ElementTag(Decimal)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the total cost to claim the given amount of townblocks for this town.
+        //
+        // The input is a number of claims.
+        // For example: <[town].claim_cost[5]> returns the cost for 5 new claims.
+        // -->
+        tagProcessor.registerTag(ElementTag.class,"claim_cost",(attribute, object) -> {
+            Town town = object.town;
+            if(town == null)
+                return null;
+            if (!attribute.hasParam()){
+                return new ElementTag(town.getTownBlockCost());
+            }
+            try {
+                var amount = attribute.getIntParam();
+                return new ElementTag(amount == 1 ? town.getTownBlockCost() : town.getTownBlockCostN(amount));
+            } catch (Exception e){
+                return null;
+            }
+        });
+        // <--[tag]
+        // @attribute <TownTag.is_ruined>
+        // @returns ElementTag(boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns if the town is ruined
+        // -->
+        tagProcessor.registerTag(ElementTag.class,"is_ruined",(attribute,object) -> {
+            return new ElementTag(object.town.isRuined());
+        });
+        // <--[tag]
+        // @attribute <TownTag.can_claim[<worldcoords>]>
+        // @returns ElementTag(Boolean)
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns whether the town is allowed to claim the specified townblock selection.
+        //
+        // Input can be a single WorldCoordTag or a ListTag of WorldCoordTag entries.
+        //
+        // This checks:
+        // - The town has enough available claims for the selection size (unless the town has unlimited claims).
+        // - Towny's adjacency/proximity rules ONLY for the first entry in the list (selection[0]).
+        // - If the town already owns plots, the selection must be a valid "edge" selection (Towny edge-block rules).
+        //
+        // This tag does not perform a claim, it only reports whether claiming would be allowed.
+        // -->
+        tagProcessor.registerTag(ElementTag.class,"can_claim",(attribute, object) -> {
+            Town town = object.town;
+            if (town == null) {
+                return new ElementTag(false);
+            }
+            if (!attribute.hasParam())
+                return new ElementTag(false);
+            ObjectTag paramObj = attribute.getParamObject();
+            ListTag list = (paramObj instanceof ListTag)
+                    ? (ListTag) paramObj
+                    : ListTag.valueOf(paramObj.toString(), attribute.context);
+            if (list == null || list.isEmpty()) {
+                return new ElementTag(false);
+            }
+
+            List<WorldCoord> selection = new ArrayList<>(list.size());
+            for (String entry : list) {
+                WorldCoordTag wcTag = WorldCoordTag.valueOf(entry, attribute.context);
+                if (wcTag == null) {
+                    return new ElementTag(false);
+                }
+                // Adjust this line if your WorldCoordTag exposes it differently:
+                selection.add(wcTag.worldCoord);
+            }
+
+            if (!town.hasUnlimitedClaims() && selection.size() > town.availableTownBlocks()){
+               return new ElementTag(false);
+            }
+            else{
+                try {
+                    ProximityUtil.testAdjacentClaimsRulesOrThrow((WorldCoord) selection.get(0), town, false);
+                    if (!isEdgeBlock(town, selection) && !town.getTownBlocks().isEmpty()) {
+                        return new ElementTag(false);
+                    }
+                    return new ElementTag(true);
+                }
+                catch (Exception e){
+                    return new ElementTag(false);
+                }
+            }
         });
     }
 
@@ -1595,6 +1686,9 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 mechanism.echoError("Could not add outlaw: " + ex.getMessage());
             }
         }
+        if(mechanism.matches("has_unlimited_claims")){
+            town.setHasUnlimitedClaims(mechanism.getValue().asBoolean());
+        }
         // <--[mechanism]
         // @object TownTag
         // @name mayor
@@ -1636,3 +1730,4 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
     }
 
 }
+
