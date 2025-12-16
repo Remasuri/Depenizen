@@ -1,5 +1,7 @@
 package com.denizenscript.depenizen.bukkit.objects.towny;
 import com.denizenscript.denizencore.objects.core.MapTag;
+import com.denizenscript.depenizen.bukkit.commands.towny.DepenizenTownyCommandHelper;
+import com.denizenscript.depenizen.bukkit.commands.towny.VetResult;
 import com.palmergames.bukkit.towny.Towny;
 import com.palmergames.bukkit.towny.event.TownInvitePlayerEvent;
 import com.palmergames.bukkit.towny.exceptions.AlreadyRegisteredException;
@@ -28,6 +30,7 @@ import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.palmergames.bukkit.towny.object.inviteobjects.PlayerJoinTownInvite;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
+import com.palmergames.bukkit.towny.utils.AreaSelectionUtil;
 import com.palmergames.bukkit.towny.utils.ProximityUtil;
 import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
@@ -264,17 +267,6 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.town.getBoard());
         });
         // <--[tag]
-        // @attribute <TownTag.tag>
-        // @returns ElementTag
-        // @plugin Depenizen, Towny
-        // @mechanism TownTag.tag
-        // @description
-        // Returns the town's current tag.
-        // -->
-        tagProcessor.registerTag(ElementTag.class, "tag", (attribute, object) -> {
-            return new ElementTag(object.town.getTag());
-        });
-        // <--[tag]
         // @attribute <TownTag.members_by_rank[<rank>]>
         // @returns ListTag
         // @plugin Depenizen, Towny
@@ -393,16 +385,6 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return null;
         });
 
-        // <--[tag]
-        // @attribute <TownTag.outlaws>
-        // @returns ListTag
-        // @plugin Depenizen, Towny
-        // @description
-        // Returns a list of the town's outlaws. Players will be valid PlayerTag instances, non-players will be plaintext of the name.
-        // -->
-        tagProcessor.registerTag(ListTag.class, "outlaws", (attribute, object) -> {
-            return getPlayersFromResidents(object.town.getOutlaws());
-        });
         // <--[tag]
         // @attribute <TownTag.homeblock>
         // @returns TownBlockTag
@@ -949,61 +931,109 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.town.isRuined());
         });
         // <--[tag]
-        // @attribute <TownTag.can_claim[<worldcoords>]>
-        // @returns ElementTag(Boolean)
-        // @plugin Depenizen, Towny
-        // @description
-        // Returns whether the town is allowed to claim the specified townblock selection.
-        //
-        // Input can be a single WorldCoordTag or a ListTag of WorldCoordTag entries.
-        //
-        // This checks:
-        // - The town has enough available claims for the selection size (unless the town has unlimited claims).
-        // - Towny's adjacency/proximity rules ONLY for the first entry in the list (selection[0]).
-        // - If the town already owns plots, the selection must be a valid "edge" selection (Towny edge-block rules).
-        //
-        // This tag does not perform a claim, it only reports whether claiming would be allowed.
-        // -->
-        tagProcessor.registerTag(ElementTag.class,"can_claim",(attribute, object) -> {
+// @attribute <TownTag.vet_claim[<map>]>
+// @returns MapTag
+// @plugin Depenizen, Towny
+// @description
+// Vets a town claim attempt using DepenizenTownyCommandHelper.vetTownClaim.
+//
+// Input map keys:
+// - selection: ListTag(WorldCoordTag) or a single WorldCoordTag (required)
+// - player: PlayerTag (required)
+// - outpost: ElementTag(Boolean) (optional, defaults false)
+//
+// Output map keys:
+// - result: ElementTag(Boolean)
+// - error: ElementTag(String) (error key or empty)
+// - selection: ListTag(WorldCoordTag) (filtered valid selection)
+// - cost: ElementTag(Decimal)
+// -->
+        tagProcessor.registerTag(MapTag.class, "vet_claim", (attribute, object) -> {
             Town town = object.town;
-            if (town == null) {
-                return new ElementTag(false);
+            if (town == null || !attribute.hasParam()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_town_or_no_input"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
             }
-            if (!attribute.hasParam())
-                return new ElementTag(false);
+
             ObjectTag paramObj = attribute.getParamObject();
-            ListTag list = (paramObj instanceof ListTag)
-                    ? (ListTag) paramObj
-                    : ListTag.valueOf(paramObj.toString(), attribute.context);
-            if (list == null || list.isEmpty()) {
-                return new ElementTag(false);
+            MapTag inputMap = paramObj.asType(MapTag.class, attribute.context);
+            if (inputMap == null) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("invalid_input_map"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
             }
 
-            List<WorldCoord> selection = new ArrayList<>(list.size());
-            for (String entry : list) {
-                WorldCoordTag wcTag = WorldCoordTag.valueOf(entry, attribute.context);
-                if (wcTag == null) {
-                    return new ElementTag(false);
-                }
-                // Adjust this line if your WorldCoordTag exposes it differently:
-                selection.add(wcTag.worldCoord);
+
+            // selection
+// selection (required)
+            ObjectTag selObj = inputMap.getObject("selection");
+            if (selObj == null) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
             }
 
-            if (!town.hasUnlimitedClaims() && selection.size() > town.availableTownBlocks()){
-               return new ElementTag(false);
+            ListTag selList = ListTag.getListFor(selObj, attribute.context);
+            List<WorldCoordTag> wcTags = selList.filter(WorldCoordTag.class, attribute.context, false);
+
+            if (wcTags.isEmpty()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_valid_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
             }
-            else{
-                try {
-                    ProximityUtil.testAdjacentClaimsRulesOrThrow((WorldCoord) selection.get(0), town, false);
-                    if (!isEdgeBlock(town, selection) && !town.getTownBlocks().isEmpty()) {
-                        return new ElementTag(false);
-                    }
-                    return new ElementTag(true);
-                }
-                catch (Exception e){
-                    return new ElementTag(false);
+
+            List<WorldCoord> coords = new ArrayList<>(wcTags.size());
+            for (WorldCoordTag wcTag : wcTags) {
+                coords.add(wcTag.getWorldCoord());
+            }
+
+            if (coords.isEmpty()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_valid_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            // player (required for your existing filtering)
+            Player player = null;
+            if (inputMap.containsKey("player")) {
+                ObjectTag playerObj = inputMap.getObject("player");
+                PlayerTag ptag = playerObj == null ? null : playerObj.asType(PlayerTag.class, attribute.context);
+                if (ptag != null) {
+                    player = ptag.getPlayerEntity();
                 }
             }
+            if (player == null) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_player"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            boolean outpost = false;
+            if (inputMap.containsKey("outpost")) {
+                outpost = inputMap.getElement("outpost").asBoolean();
+            }
+
+            VetResult vet = DepenizenTownyCommandHelper.vetTownClaim(town, coords, player, outpost);
+            return VetResult.ToMap.apply(vet);
         });
     }
 

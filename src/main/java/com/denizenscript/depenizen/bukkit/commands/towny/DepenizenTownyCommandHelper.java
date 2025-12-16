@@ -6,13 +6,9 @@ import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.event.TownPreClaimEvent;
 import com.palmergames.bukkit.towny.event.town.TownPreUnclaimCmdEvent;
 import com.palmergames.bukkit.towny.exceptions.TownyException;
-import com.palmergames.bukkit.towny.object.Resident;
-import com.palmergames.bukkit.towny.object.Town;
-import com.palmergames.bukkit.towny.object.TownBlock;
-import com.palmergames.bukkit.towny.object.TownBlockOwner;
-import com.palmergames.bukkit.towny.object.TownyWorld;
-import com.palmergames.bukkit.towny.object.WorldCoord;
+import com.palmergames.bukkit.towny.object.*;
 import com.palmergames.bukkit.towny.object.economy.Account;
+import com.palmergames.bukkit.towny.utils.AreaSelectionUtil;
 import com.palmergames.bukkit.towny.utils.ProximityUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -364,5 +360,89 @@ public final class DepenizenTownyCommandHelper {
         catch (IllegalAccessException e) {
             // Ignore and skip.
         }
+    }
+
+    public static VetResult vetTownClaim(Town town, List<WorldCoord> worldCoords, Player player, boolean outpost){
+        if(town == null)
+            return new VetResult(false,"no_town");
+        if(town.isRuined())
+            return new VetResult(false,"town_ruined");
+        if(town.isBankrupt() && !town.getTownBlocks().isEmpty())
+            return new VetResult(false,"town_bankrupt");
+        List<WorldCoord> selection = getTownClaimSelection(town,worldCoords,player);
+        if(selection.isEmpty())
+            return  new VetResult(false,"no_valid_selection",selection);
+        if(!town.hasUnlimitedClaims() && selection.size() > town.availableTownBlocks())
+            return new  VetResult(false,"town_not_enough_blocks", selection);
+        try {
+            ProximityUtil.testAdjacentClaimsRulesOrThrow((WorldCoord) selection.get(0), town, outpost);
+            if (!outpost && !isEdgeBlock(town, selection) && !town.getTownBlocks().isEmpty()) {
+                return new  VetResult(false,"town_not_attached_to_town", selection);
+            }
+        }catch (Exception e){
+            return new VetResult(false,"town_not_enough_adjacent_blocks", selection);
+        }
+        double cost = 0;
+        if (TownyEconomyHandler.isActive()) {
+            Account townAccount = town.getAccount();
+            if (townAccount == null)
+                return new VetResult(false,"economy_plugin_error");
+            int selectionSize = selection.size();
+
+            try {
+                cost = outpost ? TownySettings.getOutpostCost() : (selectionSize == 1 ? town.getTownBlockCost() : town.getTownBlockCostN(selectionSize));
+            } catch (Exception e) {
+                return new VetResult(false, "town_negative_blockCost", selection);
+            }
+            if(!townAccount.canPayFromHoldings(cost)){
+                return new VetResult(false, "town_not_enough_money", selection, cost);
+            }
+        }
+        return new VetResult(true,"",selection,cost);
+    }
+    public static VetResult vetTownUnclaim(Town town, List<WorldCoord> worldCoords){
+        if(town == null)
+            return new VetResult(false,"no_town");
+        if(town.isRuined())
+            return new VetResult(false,"town_ruined");
+        List<WorldCoord> selection = AreaSelectionUtil.filterOwnedBlocks(town, worldCoords);
+        if(selection.isEmpty())
+            return new VetResult(false,"no_valid_selection",selection);
+        try {
+            if (((WorldCoord) selection.get(0)).getTownBlock().isHomeBlock()) {
+                return new VetResult(false,"town_selected_homeblock", selection);
+            }
+            if(AreaSelectionUtil.filterHomeBlock(town,selection)){
+                return new VetResult(false,"town_selected_homeblock", selection);
+            }
+        }catch(Exception e){
+            return new VetResult(false,"town_invalid_selection", selection);
+        }
+        try{
+            ProximityUtil.testAdjacentUnclaimsRulesOrThrow((WorldCoord)selection.get(0), town);
+        }
+        catch(Exception e){
+            return new VetResult(false,"town_not_enough_adjacent_blocks", selection);
+        }
+        double cost = 0;
+        if (TownyEconomyHandler.isActive() && TownySettings.getClaimRefundPrice() < (double)0.0F) {
+            cost = Math.abs(TownySettings.getClaimRefundPrice() * (double)selection.size());
+            if (!town.getAccount().canPayFromHoldings(cost)) {
+                return new VetResult(false,"town_not_enough_money", selection,cost);
+            }
+        }
+        return new VetResult(true,"",selection,cost);
+    }
+    private static List<WorldCoord> getTownClaimSelection(Town town, List<WorldCoord> selection, Player player){
+        selection = AreaSelectionUtil.filterOutTownOwnedBlocks(selection);
+        selection = AreaSelectionUtil.filterOutUnwantedBiomeWorldCoords(player,selection);
+        selection = AreaSelectionUtil.filterOutOceanBiomeWorldCoords(player,selection);
+        if(selection.isEmpty())
+            return selection;
+        selection = AreaSelectionUtil.filterInvalidProximityToHomeblock(selection,town);
+        if(selection.isEmpty())
+            return selection;
+        selection = AreaSelectionUtil.filterInvalidProximityTownBlocks(selection,town);
+        return selection;
     }
 }

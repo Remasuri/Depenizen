@@ -3,8 +3,8 @@ package com.denizenscript.depenizen.bukkit.commands.towny;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.WorldCoordTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
@@ -53,7 +53,9 @@ public class ClaimCommand extends AbstractCommand {
     //
     // Saves:
     // - result: "success" or "failure"
-    //
+    // - selection: list[WorldCoordTag] (the selection that will actually be used)
+    // - cost: ElementTag (double)
+    // - cause: ElementTag (failure reason key or message)
     // -->
 
     public enum Action { TOWN, PLOT, GROUP }
@@ -68,6 +70,9 @@ public class ClaimCommand extends AbstractCommand {
 
         if (selection == null || selection.isEmpty()) {
             scriptEntry.saveObject("result", new ElementTag("failure"));
+            scriptEntry.saveObject("selection", new ListTag());
+            scriptEntry.saveObject("cost", new ElementTag(0));
+            scriptEntry.saveObject("cause", new ElementTag("Must specify a selection!"));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Must specify a selection!");
         }
@@ -75,12 +80,18 @@ public class ClaimCommand extends AbstractCommand {
         Towny towny = (Towny) Bukkit.getPluginManager().getPlugin("Towny");
         if (towny == null || !towny.isEnabled()) {
             scriptEntry.saveObject("result", new ElementTag("failure"));
+            scriptEntry.saveObject("selection", new ListTag());
+            scriptEntry.saveObject("cost", new ElementTag(0));
+            scriptEntry.saveObject("cause", new ElementTag("Towny is not loaded or not enabled."));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Towny is not loaded or not enabled.");
         }
 
         if (target == null) {
             scriptEntry.saveObject("result", new ElementTag("failure"));
+            scriptEntry.saveObject("selection", new ListTag());
+            scriptEntry.saveObject("cost", new ElementTag(0));
+            scriptEntry.saveObject("cause", new ElementTag("Must specify a target:<player>."));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Must specify a target:<player>.");
         }
@@ -88,6 +99,9 @@ public class ClaimCommand extends AbstractCommand {
         Player player = target.getPlayerEntity();
         if (player == null || !player.isOnline()) {
             scriptEntry.saveObject("result", new ElementTag("failure"));
+            scriptEntry.saveObject("selection", new ListTag());
+            scriptEntry.saveObject("cost", new ElementTag(0));
+            scriptEntry.saveObject("cause", new ElementTag("Target player must be online."));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Target player must be online.");
         }
@@ -96,6 +110,9 @@ public class ClaimCommand extends AbstractCommand {
         Resident resident = api.getResident(player);
         if (resident == null) {
             scriptEntry.saveObject("result", new ElementTag("failure"));
+            scriptEntry.saveObject("selection", new ListTag());
+            scriptEntry.saveObject("cost", new ElementTag(0));
+            scriptEntry.saveObject("cause", new ElementTag("Target player is not a Towny resident."));
             scriptEntry.setFinished(true);
             throw new InvalidArgumentsRuntimeException("Target player is not a Towny resident.");
         }
@@ -105,6 +122,9 @@ public class ClaimCommand extends AbstractCommand {
         for (WorldCoordTag wcTag : selection) {
             if (wcTag == null) {
                 scriptEntry.saveObject("result", new ElementTag("failure"));
+                scriptEntry.saveObject("selection", new ListTag());
+                scriptEntry.saveObject("cost", new ElementTag(0));
+                scriptEntry.saveObject("cause", new ElementTag("Selection contains a null WorldCoordTag."));
                 scriptEntry.setFinished(true);
                 throw new InvalidArgumentsRuntimeException("Selection contains a null WorldCoordTag.");
             }
@@ -116,20 +136,28 @@ public class ClaimCommand extends AbstractCommand {
         switch (action) {
             case PLOT -> {
                 // Plot claim/unclaim
-                // PlotClaim signature: (plugin, player, resident, selection, claim, forced, groupClaim)
                 runnable = new PlotClaim(towny, player, resident, coords, !unclaim, admin, false);
+
+                scriptEntry.saveObject("selection", toWorldCoordTagList(coords));
+                scriptEntry.saveObject("cost", new ElementTag(0));
+                scriptEntry.saveObject("cause", new ElementTag(""));
             }
             case GROUP -> {
                 if (!unclaim) {
-                    // Group claim
                     runnable = new PlotClaim(towny, player, resident, coords, true, admin, true);
+
+                    scriptEntry.saveObject("selection", toWorldCoordTagList(coords));
+                    scriptEntry.saveObject("cost", new ElementTag(0));
+                    scriptEntry.saveObject("cause", new ElementTag(""));
                 }
                 else {
-                    // Group unclaim: resolve group from first coord and unclaim entire group.
                     WorldCoord first = coords.get(0);
                     TownBlock tb = first.getTownBlockOrNull();
                     if (tb == null || !tb.hasPlotObjectGroup()) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.saveObject("selection", toWorldCoordTagList(coords));
+                        scriptEntry.saveObject("cost", new ElementTag(0));
+                        scriptEntry.saveObject("cause", new ElementTag("First selected worldcoord is not part of a plot group."));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException("First selected worldcoord is not part of a plot group.");
                     }
@@ -140,48 +168,89 @@ public class ClaimCommand extends AbstractCommand {
 
                     if (groupCoords.isEmpty()) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.saveObject("selection", new ListTag());
+                        scriptEntry.saveObject("cost", new ElementTag(0));
+                        scriptEntry.saveObject("cause", new ElementTag("Plot group has no plots to unclaim."));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException("Plot group has no plots to unclaim.");
                     }
 
                     runnable = new PlotClaim(towny, player, resident, groupCoords, false, admin, false);
+
+                    scriptEntry.saveObject("selection", toWorldCoordTagList(groupCoords));
+                    scriptEntry.saveObject("cost", new ElementTag(0));
+                    scriptEntry.saveObject("cause", new ElementTag(""));
                 }
             }
             case TOWN -> {
                 Town town = api.getTown(player);
                 if (town == null) {
                     scriptEntry.saveObject("result", new ElementTag("failure"));
+                    scriptEntry.saveObject("selection", toWorldCoordTagList(coords));
+                    scriptEntry.saveObject("cost", new ElementTag(0));
+                    scriptEntry.saveObject("cause", new ElementTag("Target player does not have a town."));
                     scriptEntry.setFinished(true);
                     throw new InvalidArgumentsRuntimeException("Target player does not have a town.");
                 }
 
                 if (!unclaim) {
+                    VetResult vet = DepenizenTownyCommandHelper.vetTownClaim(town, coords, player, outpost);
+
+                    // Always expose vet outputs
+                    scriptEntry.saveObject("selection", toWorldCoordTagList(vet.validWorldCoords));
+                    scriptEntry.saveObject("cost", new ElementTag(vet.cost));
+                    scriptEntry.saveObject("cause", new ElementTag(vet.error == null ? "" : vet.error));
+
+                    if (!vet.result) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        throw new InvalidArgumentsRuntimeException(vet.error);
+                    }
+
                     try {
-                        DepenizenTownyCommandHelper.verifyTownClaim(player, town, coords, outpost, admin);
+                        DepenizenTownyCommandHelper.verifyTownClaim(player, town, vet.validWorldCoords, outpost, admin);
                     }
                     catch (TownyException ex) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.saveObject("cause", new ElementTag(ex.getMessage(player)));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
                     }
-                    // TownClaim signature: (plugin, player, town, selection, outpost, claim=true, forced=admin)
-                    runnable = new TownClaim(towny, player, town, coords, outpost, true, admin);
+
+                    runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, true, admin);
                 }
                 else {
+                    VetResult vet = DepenizenTownyCommandHelper.vetTownUnclaim(town, coords);
+
+                    // Always expose vet outputs
+                    scriptEntry.saveObject("selection", toWorldCoordTagList(vet.validWorldCoords));
+                    scriptEntry.saveObject("cost", new ElementTag(vet.cost));
+                    scriptEntry.saveObject("cause", new ElementTag(vet.error == null ? "" : vet.error));
+
+                    if (!vet.result) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        throw new InvalidArgumentsRuntimeException(vet.error);
+                    }
+
                     try {
-                        DepenizenTownyCommandHelper.verifyTownUnclaim(player, town, resident, coords, admin);
+                        DepenizenTownyCommandHelper.verifyTownUnclaim(player, town, resident, vet.validWorldCoords, admin);
                     }
                     catch (TownyException ex) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.saveObject("cause", new ElementTag(ex.getMessage(player)));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
                     }
-                    // Town unclaim
-                    runnable = new TownClaim(towny, player, town, coords, outpost, false, admin);
+
+                    runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, false, admin);
                 }
             }
             default -> {
                 scriptEntry.saveObject("result", new ElementTag("failure"));
+                scriptEntry.saveObject("selection", toWorldCoordTagList(coords));
+                scriptEntry.saveObject("cost", new ElementTag(0));
+                scriptEntry.saveObject("cause", new ElementTag("Unknown towny action: " + action));
                 scriptEntry.setFinished(true);
                 throw new InvalidArgumentsRuntimeException("Unknown towny action: " + action);
             }
@@ -190,5 +259,16 @@ public class ClaimCommand extends AbstractCommand {
         Bukkit.getScheduler().runTaskAsynchronously(towny, runnable);
         scriptEntry.saveObject("result", new ElementTag("success"));
         scriptEntry.setFinished(true);
+    }
+
+    private static ListTag toWorldCoordTagList(List<WorldCoord> coords) {
+        ListTag list = new ListTag();
+        if (coords == null) {
+            return list;
+        }
+        for (WorldCoord wc : coords) {
+            list.addObject(new WorldCoordTag(wc));
+        }
+        return list;
     }
 }
