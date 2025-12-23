@@ -3,6 +3,7 @@ import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.depenizen.bukkit.commands.towny.DepenizenTownyCommandHelper;
 import com.denizenscript.depenizen.bukkit.commands.towny.VetResult;
 import com.palmergames.bukkit.towny.Towny;
+import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.event.TownInvitePlayerEvent;
 import com.palmergames.bukkit.towny.exceptions.AlreadyRegisteredException;
 import com.palmergames.bukkit.towny.invites.Invite;
@@ -32,6 +33,7 @@ import com.palmergames.bukkit.towny.object.inviteobjects.PlayerJoinTownInvite;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
 import com.palmergames.bukkit.towny.utils.AreaSelectionUtil;
 import com.palmergames.bukkit.towny.utils.ProximityUtil;
+import com.palmergames.bukkit.towny.utils.TownRuinUtil;
 import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -41,7 +43,7 @@ import org.bukkit.World;
 import java.io.InvalidObjectException;
 import java.util.*;
 
-import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
+import com.denizenscript.depenizen.bukkit.utilities.towny.TownyVisualizerUtils;
 import org.bukkit.entity.Player;
 
 import javax.swing.text.Element;
@@ -673,13 +675,20 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
 
             // --- COLLECT TOWNBLOCKS IN TARGET WORLD ---
+            // (same as before, but we no longer need TownyWorld, and the util now classifies via WorldCoord)
             List<TownBlock> blocksInWorld = new ArrayList<>();
             for (TownBlock tb : town.getTownBlocks()) {
                 if (tb == null) {
                     continue;
                 }
                 WorldCoord wc = tb.getWorldCoord();
-                World tbWorld = wc.getBukkitWorld();
+                World tbWorld;
+                try {
+                    tbWorld = wc.getBukkitWorld();
+                }
+                catch (Throwable ex) {
+                    continue;
+                }
                 if (tbWorld == null) {
                     continue;
                 }
@@ -696,7 +705,7 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return new ListTag();
             }
 
-            // Compute Towny coord bounds for this world
+            // --- COMPUTE BOUNDS (same logic as before) ---
             int minX = Integer.MAX_VALUE;
             int maxX = Integer.MIN_VALUE;
             int minZ = Integer.MAX_VALUE;
@@ -715,23 +724,16 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
                 return new ListTag();
             }
 
-            // Resolve TownyWorld from any block in that world
-            TownyWorld townyWorld;
-            try {
-                townyWorld = blocksInWorld.get(0).getWorldCoord().getTownyWorld();
-            }
-            catch (Exception ex) {
-                return new ListTag();
-            }
-
-            // Expand bounds slightly so borders against wilderness render cleanly
+            // --- BUILD EDGES ---
+            // IMPORTANT: The util expects Towny cell coords (x/z in townblocks).
+            // We keep the same "expand bounds slightly" behavior you had before.
             return TownyVisualizerUtils.buildVisualizerEdges(
-                    townyWorld,
                     bukkitWorld,
                     minX - 1, maxX + 1,
                     minZ - 1, maxZ + 1
             );
         });
+
 
 
         // <--[tag]
@@ -931,6 +933,84 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.town.isRuined());
         });
         // <--[tag]
+// @attribute <TownTag.vet_unclaim[<map>]>
+// @returns MapTag
+// @plugin Depenizen, Towny
+// @description
+// Vets a town unclaim attempt using DepenizenTownyCommandHelper.vetTownUnclaim.
+//
+// Input map keys:
+// - selection: ListTag(WorldCoordTag) or a single WorldCoordTag (required)
+//
+// Output map keys:
+// - result: ElementTag(Boolean)
+// - error: ElementTag(String) (error key or empty)
+// - selection: ListTag(WorldCoordTag) (filtered valid selection)
+// - cost: ElementTag(Decimal)
+// -->
+        tagProcessor.registerTag(MapTag.class, "vet_unclaim", (attribute, object) -> {
+            Town town = object.town;
+            if (town == null || !attribute.hasParam()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_town_or_no_input"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            ObjectTag paramObj = attribute.getParamObject();
+            MapTag inputMap = paramObj.asType(MapTag.class, attribute.context);
+            if (inputMap == null) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("invalid_input_map"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            ObjectTag selObj = inputMap.getObject("selection");
+            if (selObj == null) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            ListTag selList = ListTag.getListFor(selObj, attribute.context);
+            List<WorldCoordTag> wcTags = selList.filter(WorldCoordTag.class, attribute.context, false);
+
+            if (wcTags.isEmpty()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_valid_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            List<WorldCoord> coords = new ArrayList<>(wcTags.size());
+            for (WorldCoordTag wcTag : wcTags) {
+                coords.add(wcTag.getWorldCoord());
+            }
+
+            if (coords.isEmpty()) {
+                MapTag out = new MapTag();
+                out.putObject("result", new ElementTag(false));
+                out.putObject("error", new ElementTag("no_valid_selection"));
+                out.putObject("selection", new ListTag());
+                out.putObject("cost", new ElementTag(0.0));
+                return out;
+            }
+
+            VetResult vet = DepenizenTownyCommandHelper.vetTownUnclaim(town, coords);
+            return VetResult.ToMap.apply(vet);
+        });
+
+        // <--[tag]
 // @attribute <TownTag.vet_claim[<map>]>
 // @returns MapTag
 // @plugin Depenizen, Towny
@@ -971,8 +1051,6 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
 
 
-            // selection
-// selection (required)
             ObjectTag selObj = inputMap.getObject("selection");
             if (selObj == null) {
                 MapTag out = new MapTag();
@@ -1627,6 +1705,30 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         }
         // <--[mechanism]
 // @object TownTag
+// @name reclaim
+// @input PlayerTag
+// @plugin Depenizen, Towny
+// @description
+// Reclaims a town by a resident
+// @tags
+// <TownTag.residents>
+// <TownTag.player_count>
+// -->
+        if(mechanism.matches("reclaim")){
+            PlayerTag player = mechanism.valueAsType(PlayerTag.class);
+            if (player == null) {
+                mechanism.echoError("reclaim mechanism requires a valid PlayerTag.");
+                return;
+            }
+            Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
+            if (resident == null) {
+                mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
+                return;
+            }
+                TownRuinUtil.reclaimTown(resident, town);
+        }
+        // <--[mechanism]
+// @object TownTag
 // @name remove_resident
 // @input PlayerTag
 // @plugin Depenizen, Towny
@@ -1718,6 +1820,11 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         }
         if(mechanism.matches("has_unlimited_claims")){
             town.setHasUnlimitedClaims(mechanism.getValue().asBoolean());
+        }
+        if(mechanism.matches("is_ruined")){
+           boolean result = mechanism.getValue().asBoolean();
+           town.setRuined(result);
+           town.save();
         }
         // <--[mechanism]
         // @object TownTag

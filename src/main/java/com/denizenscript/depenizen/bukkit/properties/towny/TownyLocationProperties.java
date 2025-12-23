@@ -18,7 +18,7 @@ import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.*;
 import org.bukkit.Location;
 import org.bukkit.util.Vector;
-import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
+import com.denizenscript.depenizen.bukkit.utilities.towny.TownyVisualizerUtils;
 import java.util.*;
 
 public class TownyLocationProperties {
@@ -225,61 +225,6 @@ public class TownyLocationProperties {
                 return null;
             }
             return new TownTag(nearest);
-        });
-// <--[tag]
-// @attribute <LocationTag.towny_visualizer_lines[radius=<#>]>
-// @returns ListTag
-// @plugin Depenizen, Towny
-// @description
-// Returns a list of static visualizer edges for the grid around the location.
-//
-// Each edge is a MapTag: [start=Location; vector=Location(Vector); type=Element(String); plotgroup=Element(UUID?)]
-//
-// This uses the shared TownyVisualizerUtils logic.
-// There is NO selection support here - this list is safe to cache and reuse.
-// -->
-        LocationTag.tagProcessor.registerTag(ListTag.class, "towny_visualizer_lines", (attribute, location) -> {
-            TownyAPI api = TownyAPI.getInstance();
-            WorldCoord centerWc = WorldCoord.parseWorldCoord(location);
-            TownyWorld townyWorld = centerWc.getTownyWorld();
-
-            if (townyWorld == null) {
-                return new ListTag();
-            }
-
-            // --- 1. PARSE INPUTS ---
-            int radius = 1;
-
-            if (attribute.hasParam()) {
-                ObjectTag paramObj = attribute.getParamObject();
-
-                // MapTag input: radius=<#>
-                if (paramObj.canBeType(MapTag.class)) {
-                    MapTag inputMap = paramObj.asType(MapTag.class, attribute.context);
-
-                    if (inputMap.containsKey("radius")) {
-                        radius = inputMap.getObject("radius").asElement().asInt();
-                    }
-                }
-                else {
-                    // Simple syntax: <location.towny_visualizer_lines[3]>
-                    radius = paramObj.asElement().asInt();
-                }
-            }
-
-            int centerX = centerWc.getX();
-            int centerZ = centerWc.getZ();
-            int minX = centerX - radius;
-            int maxX = centerX + radius;
-            int minZ = centerZ - radius;
-            int maxZ = centerZ + radius;
-
-            return TownyVisualizerUtils.buildVisualizerEdges(
-                    townyWorld,
-                    location.getWorld(),
-                    minX, maxX,
-                    minZ, maxZ
-            );
         });
 
 

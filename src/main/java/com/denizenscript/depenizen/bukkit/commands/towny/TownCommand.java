@@ -12,19 +12,17 @@ import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
 import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
-import com.palmergames.bukkit.towny.TownyAPI;
-import com.palmergames.bukkit.towny.TownySettings;
-import com.palmergames.bukkit.towny.TownyUniverse;
-import com.palmergames.bukkit.towny.event.DeleteTownEvent;
-import com.palmergames.bukkit.towny.event.NewTownEvent;
-import com.palmergames.bukkit.towny.event.PreDeleteTownEvent;
-import com.palmergames.bukkit.towny.event.PreNewTownEvent;
+import com.palmergames.bukkit.towny.*;
+import com.palmergames.bukkit.towny.event.*;
 import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
 import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.TownyWorld;
 import com.palmergames.bukkit.towny.object.WorldCoord;
+import com.palmergames.bukkit.towny.regen.PlotBlockData;
+import com.palmergames.bukkit.towny.regen.TownyRegenAPI;
+import com.palmergames.bukkit.towny.utils.NameUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -165,23 +163,58 @@ public class TownCommand extends AbstractCommand {
                     universe.newTown(name);
                     Town town = universe.getTown(name);
 
-                    // Attach resident + mayor
-                    resident.setTown(town);
-                    town.setMayor(resident);
+
 
                     // Create the initial TownBlock as the homeblock
                     TownBlock townBlock = new TownBlock(worldCoord.getX(), worldCoord.getZ(), townyWorld);
+
                     townBlock.setTown(town);
-                    universe.getDataSource().saveTownBlock(townBlock);
+
+                    town.setRegistered(System.currentTimeMillis());
+                    town.setMapColorHexCode(TownySettings.getDefaultTownMapColor());
+                    // Attach resident + mayor
+                    resident.setTown(town);
+                    town.setMayor(resident, false);
+                    town.setFounder(resident.getName());
+                    townBlock.setType(townBlock.getType());
 
                     // Set homeblock & spawn
                     town.setHomeBlock(townBlock);
                     town.setSpawn(homeLoc);
+                    if (resident.isNPC()) {
+                        town.setHasUpkeep(false);
+                    }
+                    townBlock.setPermissions(town.getPermissions().toString());
+                    if (worldCoord.getTownyWorld().isUsingPlotManagementRevert()) {
+                        PlotBlockData plotChunk = TownyRegenAPI.getPlotChunk(townBlock);
+                        if (plotChunk != null && TownyRegenAPI.getRegenQueueList().contains(townBlock.getWorldCoord())) {
+                            TownyRegenAPI.removeFromActiveRegeneration(plotChunk);
+                            TownyRegenAPI.removeFromRegenQueueList(townBlock.getWorldCoord());
+                            TownyRegenAPI.addPlotChunkSnapshot(plotChunk);
+                        } else {
+                            TownyRegenAPI.handleNewSnapshot(townBlock);
+                        }
+                    }
+                    if (TownyEconomyHandler.isActive()) {
+                        //String var10000 = TownySettings.getTownAccountPrefix();
+                        //TownyMessaging.sendDebugMsg("Creating new Town account: " + var10000 + name);
 
-                    // Persist town + resident
-                    universe.getDataSource().saveTown(town);
-                    universe.getDataSource().saveResident(resident);
+                        try {
+                            town.getAccount().setBalance((double)0.0F, "Setting 0 balance for Town");
+                        } catch (NullPointerException var12) {
+                            throw new TownyException("The server economy plugin " + TownyEconomyHandler.getVersion() + " could not return the Town account!");
+                        }
+                    }
+                    if (TownySettings.isTownTagSetAutomatically()) {
+                        town.setTag(NameUtil.getTagFromName(name));
+                    }
 
+                    townBlock.setChanged(true);
+                    townBlock.save();                    // Persist town + resident
+                    town.save();
+                    resident.save();
+                    worldCoord.getTownyWorld().save();
+                    Towny.getPlugin().updateCache(townBlock.getWorldCoord());
                     // Fire Towny's NewTownEvent after successful creation
                     Bukkit.getPluginManager().callEvent(new NewTownEvent(town));
 
@@ -259,12 +292,13 @@ public class TownCommand extends AbstractCommand {
                 }
 
                 try {
+                    Resident mayor = town.getMayor(); // may be null, event handles that
                     // Use Towny's own datasource deleteTown, which handles townblocks etc.
-                    universe.getDataSource().deleteTown(town);
+                    universe.getDataSource().removeTown(town, cause, sender);
 
                     // Fire Towny's DeleteTownEvent after deletion
-                    Resident mayor = town.getMayor(); // may be null, event handles that
-                    Bukkit.getPluginManager().callEvent(new DeleteTownEvent(town, mayor, cause, sender));
+
+//                    Bukkit.getPluginManager().callEvent(new DeleteTownEvent(town, mayor, cause, sender));
 
                     scriptEntry.saveObject("result", new ElementTag("success"));
                     scriptEntry.setFinished(true);

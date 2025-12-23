@@ -22,6 +22,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 
 import com.denizenscript.depenizen.bukkit.events.new_events.DepenizenPlotGroupUpdatedEvent;
 import com.denizenscript.depenizen.bukkit.utilities.towny.TownyManagementHelpers;
+import com.palmergames.bukkit.towny.Towny;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.event.plot.PlayerChangePlotTypeEvent;
@@ -250,7 +251,7 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             if (uuid == null) {
                 return null;
             }
-            return new PlayerTag(Bukkit.getOfflinePlayer(uuid));
+            return new PlayerTag(uuid);
         }));
         // <--[tag]
         // @attribute <PlotGroupTag.has_pvp>
@@ -850,21 +851,31 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
                     return;
                 }
             }
-
+            for(TownBlock tb : plotGroup.getTownBlocks()){
+                tb.setResident(null);
+                tb.setChanged(true);
+                tb.save();
+            }
             // Clear ownership
             plotGroup.setResident(null);
             plotGroup.save();
         }
-        if(mechanism.matches("set_owner")){
+        if(mechanism.matches("owner")){
             PlayerTag player = mechanism.valueAsType(PlayerTag.class);
             if (player == null) {
-                mechanism.echoError("set_owner mechanism requires a valid PlayerTag.");
+                mechanism.echoError("owner mechanism requires a valid PlayerTag.");
                 return;
             }
             Resident resident = TownyAPI.getInstance().getResident(player.getUUID());
             if (resident == null) {
                 mechanism.echoError("Player '" + player.identifySimple() + "' is not a registered Towny resident.");
                 return;
+            }
+            for(TownBlock tb : plotGroup.getTownBlocks()){
+                tb.setResident(resident);
+                tb.setChanged(true);
+                tb.save();
+                Towny.getPlugin().updateCache(tb.getWorldCoord());
             }
             plotGroup.setResident(resident);
             plotGroup.save();

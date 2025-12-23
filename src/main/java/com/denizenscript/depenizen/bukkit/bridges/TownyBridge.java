@@ -14,11 +14,10 @@ import com.denizenscript.depenizen.bukkit.properties.towny.TownyLocationProperti
 import com.denizenscript.depenizen.bukkit.Bridge;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyPlayerProperties;
 import com.denizenscript.depenizen.bukkit.properties.towny.TownyWorldProperties;
-import com.denizenscript.depenizen.bukkit.properties.towny.TownyVisualizerUtils;
+import com.denizenscript.depenizen.bukkit.utilities.towny.TownyVisualizerUtils;
 import com.denizenscript.depenizen.bukkit.properties.utilities.BukkitPlayerProperties;
 import com.palmergames.bukkit.towny.TownyAPI;
-import com.palmergames.bukkit.towny.object.Nation;
-import com.palmergames.bukkit.towny.object.Town;
+import com.palmergames.bukkit.towny.object.*;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.denizenscript.denizen.objects.CuboidTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -30,11 +29,9 @@ import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.tags.ReplaceableTagEvent;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagManager;
-import com.palmergames.bukkit.towny.object.TownyWorld;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownySettings.TownLevel;
-import com.palmergames.bukkit.towny.object.TownBlock;
 import org.bukkit.World;
 
 import java.util.ArrayList;
@@ -72,6 +69,7 @@ public class TownyBridge extends Bridge {
         ScriptEvent.registerScriptEvent(PlayerUnclaimsPlotScriptEvent.class);
         ScriptEvent.registerScriptEvent(PlotGroupRemovedScriptEvent.class);
         ScriptEvent.registerScriptEvent(PlotGroupUpdatedScriptEvent.class);
+        ScriptEvent.registerScriptEvent(TownDeletedScriptEvent.class);
         TagManager.registerTagHandler(ObjectTag.class, "worldcoord", (attribute) -> {
             if(attribute.hasParam()){
                 return WorldCoordTag.valueOf(attribute.getParam(), attribute.context);
@@ -116,6 +114,14 @@ public class TownyBridge extends Bridge {
     public void townyTagEvent(ReplaceableTagEvent event) {
         Attribute attribute = event.getAttributes().fulfill(1);
 
+        if(attribute.startsWith("town_start_cost")){
+            event.setReplacedObject(new ElementTag(TownySettings.getNewTownPrice()));
+            return;
+        }
+        if (attribute.startsWith("reclaim_cost")){
+            event.setReplacedObject(new ElementTag(TownySettings.getEcoPriceReclaimTown()));
+            return;
+        }
         // <--[tag]
         // @attribute <towny.list_towns[(<world>)]>
         // @returns ListTag(TownTag)
@@ -219,106 +225,106 @@ public class TownyBridge extends Bridge {
             return;
         }
 
-        // <--[tag]
-        // @attribute <towny.townblock_visualizer_lines[<list>]>
-        // @returns ListTag(MapTag)
-        // @plugin Depenizen, Towny
-        // @description
-        // Given a list of TownBlockTags, returns a list of visualizer edge maps
-        // outlining the *selection* of townblocks.
-        //
-        // The entire selection is treated as a single region, and edges are generated
-        // wherever a selected block borders a non-selected block.
-        //
-        // Each edge is a MapTag:
-        //   start=LocationTag
-        //   vector=LocationTag
-        //   type=ElementTag("selection")
-        //
-        // Example:
-        // - define blocks <player.flag[radar_selection_blocks]||<list>>
-        // - define edges <towny.townblock_visualizer_lines[<[blocks]>]>
-        // -->
-        if (attribute.startsWith("townblock_visualizer_lines")) {
+// <--[tag]
+// @attribute <towny.worldcoord_visualizer_lines[<list>]>
+// @returns ListTag(MapTag)
+// @plugin Depenizen, Towny
+// @description
+// Given a list of WorldCoordTags, returns a list of visualizer edge maps
+// outlining the *selection* of worldcoords.
+//
+// Coords inside the selection are classified normally (town/plot/homeblock/wilderness).
+// Borders against non-selected coords are emitted with type="outside".
+// Wilderness edges can be emitted (type="wilderness") when selected wilderness borders town,
+// depending on the visualizer utils' selection behavior.
+//
+// Each edge is a MapTag:
+//   start=LocationTag
+//   vector=LocationTag
+//   type=ElementTag(<edge type>)
+//   (optional) plotgroup=ElementTag(<uuid>)
+//
+// Example:
+// - define coords <player.flag[radar_selection_coords]||<list>>
+// - define edges <towny.worldcoord_visualizer_lines[<[coords]>]>
+// -->
+        if (attribute.startsWith("worldcoord_visualizer_lines")) {
             if (!attribute.hasParam()) {
-                attribute.echoError("towny.townblock_visualizer_lines[...] requires a list of TownBlockTags.");
+                attribute.echoError("towny.worldcoord_visualizer_lines[...] requires a list of WorldCoordTags.");
                 return;
             }
 
-            // Treat the param as a ListTag – it can contain real TownBlockTags already
             ListTag list = attribute.getParamObject().asType(ListTag.class, attribute.context);
             if (list == null) {
-                attribute.echoError("towny.townblock_visualizer_lines[...] parameter must be a list of TownBlockTags.");
+                attribute.echoError("towny.worldcoord_visualizer_lines[...] parameter must be a list of WorldCoordTags.");
                 return;
             }
 
-            List<TownBlock> selection = new ArrayList<>();
+            List<WorldCoord> selection = new ArrayList<>();
 
-            // Each entry should already be a TownBlockTag (per your setup),
-            // but we still go through asType(...) so it also works if they are strings.
             for (ObjectTag obj : list.objectForms) {
                 if (obj == null) {
                     continue;
                 }
-                TownBlockTag tbt = obj.asType(TownBlockTag.class, attribute.context);
-                if (tbt == null || tbt.townBlock == null) {
+                WorldCoordTag wct = obj.asType(WorldCoordTag.class, attribute.context);
+                if (wct == null || wct.worldCoord == null) {
                     continue;
                 }
-                selection.add(tbt.townBlock);
+                selection.add(wct.worldCoord);
             }
 
-            // Fallback: if someone passes a single TownBlockTag instead of a list
+            // Fallback: single WorldCoordTag passed instead of a list
             if (selection.isEmpty()) {
-                TownBlockTag single = attribute.getParamObject().asType(TownBlockTag.class, attribute.context);
-                if (single != null && single.townBlock != null) {
-                    selection.add(single.townBlock);
+                WorldCoordTag single = attribute.getParamObject().asType(WorldCoordTag.class, attribute.context);
+                if (single != null && single.worldCoord != null) {
+                    selection.add(single.worldCoord);
                 }
             }
 
             if (selection.isEmpty()) {
-                // No valid blocks -> return empty list, no exception
                 event.setReplacedObject(new ListTag().getObjectAttribute(attribute.fulfill(1)));
                 return;
             }
 
-            // Group by TownyWorld so multi-world selections are supported
-            Map<TownyWorld, List<TownBlock>> byWorld = new HashMap<>();
-            for (TownBlock tb : selection) {
-                if (tb == null) {
+            // Resolve world from first coord (single-world behavior)
+            World bukkitWorld = null;
+            for (WorldCoord wc : selection) {
+                if (wc == null) {
                     continue;
                 }
-                TownyWorld tWorld;
                 try {
-                    tWorld = tb.getWorldCoord().getTownyWorld();
+                    bukkitWorld = wc.getBukkitWorld();
                 }
-                catch (Exception ex) {
-                    continue;
+                catch (Throwable ex) {
+                    // ignore
                 }
-                byWorld.computeIfAbsent(tWorld, k -> new ArrayList<>()).add(tb);
+                if (bukkitWorld != null) {
+                    break;
+                }
             }
 
-            ListTag allEdges = new ListTag();
-
-            for (Map.Entry<TownyWorld, List<TownBlock>> entrySet : byWorld.entrySet()) {
-                TownyWorld tWorld = entrySet.getKey();
-                World bukkitWorld = tWorld.getBukkitWorld();
-                if (bukkitWorld == null) {
-                    continue;
-                }
-                List<TownBlock> blocks = entrySet.getValue();
-
-                // This uses your selection-specific edge builder:
-                ListTag edges = TownyVisualizerUtils.buildSelectionVisualizerEdges(
-                        tWorld,
-                        bukkitWorld,
-                        blocks
-                );
-                allEdges.addAll(edges);
+            if (bukkitWorld == null) {
+                event.setReplacedObject(new ListTag().getObjectAttribute(attribute.fulfill(1)));
+                return;
             }
 
-            event.setReplacedObject(allEdges.getObjectAttribute(attribute.fulfill(1)));
+            // IMPORTANT for "no group-by-world": drop coords that aren't in this world
+            String worldName = bukkitWorld.getName();
+            selection.removeIf(wc -> wc == null || !worldName.equals(wc.getWorldName()));
+
+            if (selection.isEmpty()) {
+                event.setReplacedObject(new ListTag().getObjectAttribute(attribute.fulfill(1)));
+                return;
+            }
+
+            // Now selection behaves like before (inside/outside only)
+            ListTag edges = TownyVisualizerUtils.buildSelectionVisualizerEdges(bukkitWorld, selection);
+
+            event.setReplacedObject(edges.getObjectAttribute(attribute.fulfill(1)));
             return;
         }
+
+
     }
 
     public void townTagEvent(ReplaceableTagEvent event) {

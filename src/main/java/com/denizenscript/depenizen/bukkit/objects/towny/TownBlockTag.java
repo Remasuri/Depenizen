@@ -220,7 +220,16 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(WorldTag.class, "world", (attribute, object) -> {
             return new WorldTag(object.getCoord().getBukkitWorld());
         });
-
+        // <--[tag]
+        // @attribute <TownBlockTag.worldcoord>
+        // @returns WorldTag
+        // @plugin Depenizen, Towny
+        // @description
+        // Returns the worldcoord this townblock is in.
+        // -->
+        tagProcessor.registerTag(WorldCoordTag.class,"worldcoord",(attribute, object) -> {
+            return new WorldCoordTag(object.getCoord());
+        });
         // <--[tag]
         // @attribute <TownBlockTag.x>
         // @returns ElementTag(Number)

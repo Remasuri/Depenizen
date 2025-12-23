@@ -201,20 +201,10 @@ public class ClaimCommand extends AbstractCommand {
                     scriptEntry.saveObject("cost", new ElementTag(vet.cost));
                     scriptEntry.saveObject("cause", new ElementTag(vet.error == null ? "" : vet.error));
 
-                    if (!vet.result) {
+                    if (!admin && !vet.result) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException(vet.error);
-                    }
-
-                    try {
-                        DepenizenTownyCommandHelper.verifyTownClaim(player, town, vet.validWorldCoords, outpost, admin);
-                    }
-                    catch (TownyException ex) {
-                        scriptEntry.saveObject("result", new ElementTag("failure"));
-                        scriptEntry.saveObject("cause", new ElementTag(ex.getMessage(player)));
-                        scriptEntry.setFinished(true);
-                        throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
                     }
 
                     runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, true, admin);
@@ -227,20 +217,10 @@ public class ClaimCommand extends AbstractCommand {
                     scriptEntry.saveObject("cost", new ElementTag(vet.cost));
                     scriptEntry.saveObject("cause", new ElementTag(vet.error == null ? "" : vet.error));
 
-                    if (!vet.result) {
+                    if (!admin && !vet.result) {
                         scriptEntry.saveObject("result", new ElementTag("failure"));
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException(vet.error);
-                    }
-
-                    try {
-                        DepenizenTownyCommandHelper.verifyTownUnclaim(player, town, resident, vet.validWorldCoords, admin);
-                    }
-                    catch (TownyException ex) {
-                        scriptEntry.saveObject("result", new ElementTag("failure"));
-                        scriptEntry.saveObject("cause", new ElementTag(ex.getMessage(player)));
-                        scriptEntry.setFinished(true);
-                        throw new InvalidArgumentsRuntimeException(ex.getMessage(player));
                     }
 
                     runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, false, admin);

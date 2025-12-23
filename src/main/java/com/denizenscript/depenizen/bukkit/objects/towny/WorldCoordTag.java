@@ -31,7 +31,7 @@ public class WorldCoordTag implements ObjectTag, FlaggableObject {
     // @base ElementTag
     // @implements FlaggableObject
     // @format
-    // The identity format for worldcoords is <world>;<x>;<z>
+    // The identity format for worldcoords is <world>,<x>,<z>
     // For example, 'worldcoord@world;12;34'.
     //
     // @plugin Depenizen, Towny
@@ -40,7 +40,7 @@ public class WorldCoordTag implements ObjectTag, FlaggableObject {
     //
     // This object type is flaggable.
     // Flags on this object type will be stored in the server saves file,
-    // under "__depenizen_towny_worldcoords.<world>;<x>;<z>"
+    // under "__depenizen_towny_worldcoords.<world>,<x>,<z>"
     // -->
 
     ////////////////
