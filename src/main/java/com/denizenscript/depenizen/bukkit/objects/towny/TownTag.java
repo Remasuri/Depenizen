@@ -30,6 +30,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.palmergames.bukkit.towny.object.inviteobjects.PlayerJoinTownInvite;
+import com.palmergames.bukkit.towny.permissions.TownyPerms;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
 import com.palmergames.bukkit.towny.utils.AreaSelectionUtil;
 import com.palmergames.bukkit.towny.utils.ProximityUtil;
@@ -230,6 +231,79 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             return getPlayersFromResidents(object.town.getRank("assistant"));
         });
         // <--[tag]
+// @attribute <TownTag.get_current_level_info>
+// @returns MapTag
+// @plugin Depenizen, Towny
+// @description
+// Returns a MapTag of information about the town's *current* Towny "town level".
+//
+// The returned map contains:
+// - namePrefix: ElementTag
+// - namePostfil: ElementTag (Towny's namePostfix, note: key spelling matches implementation)
+// - mayorPrefix: ElementTag
+// - townBlockLimit: ElementTag(Number)
+// - upkeepModifier: ElementTag(Decimal)
+// - peacefulCostModifier: ElementTag(Decimal)
+// - townOutpostLimit: ElementTag(Number)
+// - debtCapModifier: ElementTag(Decimal)
+// - resourceProductionModifier: ElementTag(Decimal)
+// - bankCapModifier: ElementTag(Decimal)
+// -->
+        tagProcessor.registerTag(MapTag.class,"get_current_level_info",(attribute,object) -> {
+            var currentLevel = object.town.getTownLevel();
+            MapTag result = new MapTag();
+            result.putObject("namePrefix",new ElementTag(currentLevel.namePrefix()));
+            result.putObject("namePostfil", new ElementTag(currentLevel.namePostfix()));
+            result.putObject("mayorPrefix", new ElementTag(currentLevel.mayorPrefix()));
+            result.putObject("townBlockLimit", new ElementTag(currentLevel.townBlockLimit()));
+            result.putObject("upkeepModifier", new ElementTag(currentLevel.upkeepModifier()));
+            result.putObject("peacefulCostModifier", new ElementTag(currentLevel.peacefulCostMultiplier()));
+            result.putObject("townOutpostLimit", new ElementTag(currentLevel.townOutpostLimit()));
+            result.putObject("debtCapModifier", new ElementTag(currentLevel.debtCapModifier()));
+            result.putObject("resourceProductionModifier", new ElementTag(currentLevel.resourceProductionModifier()));
+            result.putObject("bankCapModifier", new ElementTag(currentLevel.bankCapModifier()));
+            return result;
+        });
+        tagProcessor.registerTag(ElementTag.class, "homeblock_allowed",(attribute,object) -> {
+            if(!attribute.hasParam()){
+                return new ElementTag(true);
+            }
+            WorldCoordTag worldCoordTag = attribute.getParamObject().asType(WorldCoordTag.class, attribute.context);
+            if (worldCoordTag != null){
+                try {
+                    ProximityUtil.allowTownHomeBlockOrThrow(worldCoordTag.worldCoord.getTownyWorld(), worldCoordTag.worldCoord, object.town, false);
+                    return new ElementTag(true);
+                } catch (Exception e) {
+                    return new ElementTag(false);
+                }
+            }
+            return new ElementTag(false);
+        });
+        // <--[tag]
+// @attribute <TownTag.get_required_residents_lvl_up>
+// @returns ElementTag(Number)
+// @plugin Depenizen, Towny
+// @description
+// Returns the number of residents required for this town to level up to the *next* town level.
+//
+// If the value is not applicable, returns -1.
+// This will return -1 when:
+// - the town is level 0,
+// - the town is already at the max town level,
+// - or Towny is configured to determine town levels by townblock count (instead of resident count).
+// -->
+        tagProcessor.registerTag(ElementTag.class, "get_required_residents_lvl_up",(attribute, object) -> {
+            var townLevel = object.town.getLevelNumber();
+            if (townLevel == 0)
+                return new ElementTag(-1);
+            if (townLevel == TownySettings.getTownLevelMax())
+                return new ElementTag(-1);
+            if (TownySettings.isTownLevelDeterminedByTownBlockCount()){
+                return new ElementTag(-1);
+            }
+            return new ElementTag(TownySettings.getResidentCountForTownLevel(object.town.getLevelNumber()+1));
+        });
+        // <--[tag]
         // @attribute <TownTag.townblocks>
         // @returns ListTag
         // @plugin Depenizen, Towny
@@ -301,11 +375,12 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ListTag.class, "trusted_residents", ((attribute, object) -> {
             ListTag list = new ListTag();
             for (Resident resident : object.town.getTrustedResidents()){
-                PlayerTag playerTag = new PlayerTag(resident.getPlayer());
+                PlayerTag playerTag = new PlayerTag(resident.getUUID());
                 list.addObject(playerTag);
             }
             return  list;
         }));
+
 
         // <--[tag]
         // @attribute <TownTag.is_forsale>
@@ -462,6 +537,30 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class,"available_townblocks",(attribute, object) -> {
             return new ElementTag(object.town.availableTownBlocks());
         });
+        tagProcessor.registerTag(ElementTag.class,"used_townblocks",(attribute, object) -> {
+            return new ElementTag(object.town.getNumTownBlocks());
+        });
+        tagProcessor.registerTag(ElementTag.class,"max_townblocks",(attribute, object) -> {
+            return new ElementTag(object.town.getMaxTownBlocks());
+        });
+        tagProcessor.registerTag(ElementTag.class,"bonus_townblocks",(attribute, object) -> {
+            return new ElementTag(object.town.getBonusBlocks());
+        });
+        tagProcessor.registerTag(ElementTag.class,"max_bonus_townblocks",(attribute, object) -> {
+            return new ElementTag(object.town.getTownLevel().townBlockBuyBonusLimit());
+        });
+        tagProcessor.registerTag(ElementTag.class,"bonus_townblock_cost",(attribute, object) -> {
+            if(attribute.hasParam()){
+                try {
+                    return new ElementTag(object.town.getBonusBlockCostN(attribute.getIntParam()));
+                }
+                catch(Exception e){
+
+                }
+            }
+            return new ElementTag(object.town.getBonusBlockCost());
+        });
+
         // <--[tag]
         // @attribute <TownTag.size>
         // @returns ElementTag(Number)
@@ -1758,6 +1857,14 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             resident.save();
             town.save();
         }
+        if(mechanism.matches("bonus_townblocks")){
+            int value = mechanism.getValue().asInt();
+            if(value < 0){
+                mechanism.echoError("mechanism bonus_townblocks can't have negative input");
+            }
+            town.setBonusBlocks(value);
+            town.save();
+        }
         // <--[mechanism]
         // @object TownTag
         // @name add_outlaw
@@ -1856,8 +1963,13 @@ public class TownTag implements ObjectTag, Adjustable, FlaggableObject {
             }
 
             try {
+                Resident oldMayor = town.getMayor();
                 town.setMayor(resident);
-                resident.save();
+                Towny.getPlugin().deleteCache(resident);
+                if (oldMayor != null){
+                    TownyPerms.assignPermissions(oldMayor,null);
+                    Towny.getPlugin().deleteCache(oldMayor);
+                }
                 town.save();
             }
             catch (Exception ex) {

@@ -405,7 +405,18 @@ public final class DepenizenTownyCommandHelper {
             return new VetResult(false,"no_town");
         if(town.isRuined())
             return new VetResult(false,"town_ruined");
-        List<WorldCoord> selection = AreaSelectionUtil.filterOwnedBlocks(town, worldCoords);
+        List<WorldCoord> selection = new ArrayList<WorldCoord>();
+        for(WorldCoord selObj : AreaSelectionUtil.filterOwnedBlocks(town, worldCoords)){
+            try {
+                if (selObj.getTownBlock().hasPlotObjectGroup()){
+                    if(selObj.getTownBlock().getPlotObjectGroup().getResident() == null){
+                        selection.add(selObj);
+                    }
+                }
+            }catch(Exception e){
+                selection.add(selObj);
+            }
+        }
         if(selection.isEmpty())
             return new VetResult(false,"no_valid_selection",selection);
         try {

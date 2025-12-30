@@ -13,6 +13,10 @@ import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.scripts.commands.generator.ArgSubType;
 import com.palmergames.bukkit.towny.Towny;
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownyUniverse;
+import com.palmergames.bukkit.towny.db.TownyDataSource;
+import com.palmergames.bukkit.towny.event.TownPreClaimEvent;
+import com.palmergames.bukkit.towny.event.town.TownPreUnclaimCmdEvent;
 import com.palmergames.bukkit.towny.exceptions.TownyException;
 import com.palmergames.bukkit.towny.object.PlotGroup;
 import com.palmergames.bukkit.towny.object.Resident;
@@ -21,11 +25,11 @@ import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.WorldCoord;
 import com.palmergames.bukkit.towny.tasks.PlotClaim;
 import com.palmergames.bukkit.towny.tasks.TownClaim;
+import com.palmergames.bukkit.util.BukkitTools;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class ClaimCommand extends AbstractCommand {
 
@@ -207,7 +211,19 @@ public class ClaimCommand extends AbstractCommand {
                         throw new InvalidArgumentsRuntimeException(vet.error);
                     }
 
+                    try{
+                        fireTownPreClaimEventOrThrow(player,town,outpost, vet.validWorldCoords);
+                    } catch (TownyException e) {
+                        scriptEntry.saveObject("selection", toWorldCoordTagList(vet.validWorldCoords));
+                        scriptEntry.saveObject("cost", new ElementTag(vet.cost));
+                        scriptEntry.saveObject("cause", new ElementTag("event_cancelled"));
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        return;
+                    }
                     runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, true, admin);
+                    //scriptEntry.saveObject("result", new ElementTag("success"));
+                    //scriptEntry.setFinished(true);
                 }
                 else {
                     VetResult vet = DepenizenTownyCommandHelper.vetTownUnclaim(town, coords);
@@ -222,8 +238,24 @@ public class ClaimCommand extends AbstractCommand {
                         scriptEntry.setFinished(true);
                         throw new InvalidArgumentsRuntimeException(vet.error);
                     }
+                    try {
+                        BukkitTools.ifCancelledThenThrow(new TownPreUnclaimCmdEvent(town, resident, vet.validWorldCoords.get(0).getTownyWorld(), vet.validWorldCoords));
+                        Runnable townUnclaim = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, false, admin);
 
-                    runnable = new TownClaim(towny, player, town, vet.validWorldCoords, outpost, false, admin);
+                        runnable = () -> {
+                            // Prevent ghost plotgroups by detaching plotgroup membership before TownClaim deletes townblocks.
+                            detachUnclaimedTownBlocksFromPlotGroups(vet.validWorldCoords);
+                            townUnclaim.run();
+                        };
+
+                        //    scriptEntry.saveObject("result", new ElementTag("success"));
+                    //    scriptEntry.setFinished(true);
+                    }
+                    catch (TownyException e) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        return;
+                    }
                 }
             }
             default -> {
@@ -235,12 +267,25 @@ public class ClaimCommand extends AbstractCommand {
                 throw new InvalidArgumentsRuntimeException("Unknown towny action: " + action);
             }
         }
+            Bukkit.getScheduler().runTaskAsynchronously(towny, runnable);
+            scriptEntry.saveObject("result", new ElementTag("success"));
+            scriptEntry.setFinished(true);
 
-        Bukkit.getScheduler().runTaskAsynchronously(towny, runnable);
-        scriptEntry.saveObject("result", new ElementTag("success"));
-        scriptEntry.setFinished(true);
     }
-
+    private static void fireTownPreClaimEventOrThrow(Player player, Town town, boolean outpost, List<WorldCoord> selection) throws TownyException {
+        int blockedClaims = 0;
+        String cancelMessage = "";
+        boolean isHomeblock = town.getTownBlocks().size() == 0;
+        for (WorldCoord coord : selection) {
+            TownPreClaimEvent preClaimEvent = new TownPreClaimEvent(town, new TownBlock(coord), player, outpost, isHomeblock, false);
+            if(BukkitTools.isEventCancelled(preClaimEvent)) {
+                blockedClaims++;
+                cancelMessage = preClaimEvent.getCancelMessage();
+            }
+        }
+        if (blockedClaims > 0)
+            throw new TownyException(String.format(cancelMessage, blockedClaims, selection.size()));
+    }
     private static ListTag toWorldCoordTagList(List<WorldCoord> coords) {
         ListTag list = new ListTag();
         if (coords == null) {
@@ -251,4 +296,60 @@ public class ClaimCommand extends AbstractCommand {
         }
         return list;
     }
+    private static void detachUnclaimedTownBlocksFromPlotGroups(List<WorldCoord> coords) {
+        TownyUniverse universe = TownyUniverse.getInstance();
+        TownyDataSource dataSource = universe.getDataSource();
+
+        // Group -> townblocks to remove from that group
+        Map<PlotGroup, Set<TownBlock>> removals = new HashMap<>();
+
+        for (WorldCoord wc : coords) {
+            TownBlock tb = wc.getTownBlockOrNull();
+            if (tb == null || !tb.hasPlotObjectGroup()) {
+                continue;
+            }
+            PlotGroup group = tb.getPlotObjectGroup();
+            if (group == null) {
+                continue;
+            }
+            removals.computeIfAbsent(group, k -> new LinkedHashSet<>()).add(tb);
+
+        }
+
+        // Apply removals
+        for (Map.Entry<PlotGroup, Set<TownBlock>> entry : removals.entrySet()) {
+            PlotGroup group = entry.getKey();
+            Town owningTown = group.getTown();
+
+            for (TownBlock tb : entry.getValue()) {
+
+                // Remove ALL occurrences (handles duplicates/ghost duplicates).
+                while (group.getTownBlocks().contains(tb)) {
+                    group.removeTownBlock(tb);
+                }
+
+                tb.removePlotObjectGroup();
+                dataSource.saveTownBlock(tb);
+            }
+
+
+            // If the group is now empty, delete it (mirrors your PlotGroupCommand REMOVE behavior)
+            if (group.getTownBlocks().isEmpty()) {
+                if (owningTown != null) {
+                    owningTown.removePlotGroup(group);
+                    dataSource.saveTown(owningTown);
+                }
+                universe.unregisterGroup(group.getUUID());
+                dataSource.removePlotGroup(group);
+            }
+            else {
+                // Persist the updated group
+                if (owningTown != null) {
+                    dataSource.saveTown(owningTown);
+                }
+                dataSource.savePlotGroup(group);
+            }
+        }
+    }
+
 }

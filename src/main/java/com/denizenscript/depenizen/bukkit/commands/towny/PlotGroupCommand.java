@@ -16,9 +16,12 @@ import com.palmergames.bukkit.towny.event.plot.group.PlotGroupCreatedEvent;
 import com.palmergames.bukkit.towny.object.PlotGroup;
 import com.palmergames.bukkit.towny.object.Town;
 import com.palmergames.bukkit.towny.object.TownBlock;
+import com.palmergames.bukkit.towny.object.WorldCoord;
 import org.bukkit.Bukkit;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // TODO: Expand with capabilities to have different identifiers. Maybe name can become optional? (Randomly generate name?)
@@ -51,16 +54,34 @@ public class PlotGroupCommand extends AbstractCommand {
                     scriptEntry.setFinished(true);
                     throw new InvalidArgumentsRuntimeException("Must specify a town and name when creating a plotgroup!");
                 }
+                if (townblocks == null || townblocks.isEmpty()) {
+                    throw new InvalidArgumentsRuntimeException("Must specify townblocks: when creating a plotgroup!");
+                }
 
-                if (townblocks != null) {
-                    for (TownBlockTag townBlockTag : townblocks) {
-                        TownBlock townBlock = townBlockTag.getTownBlock();
-                        if (townBlock.getTownOrNull() != town.getTown()) {
-                            scriptEntry.saveObject("result", new ElementTag("failure"));
-                            scriptEntry.setFinished(true);
-                            throw new InvalidArgumentsRuntimeException("townblocks must all be from the specified town!");
-                        }
+                // Deduplicate by WorldCoord while preserving order.
+                Map<WorldCoord, TownBlock> uniqueBlocks = new LinkedHashMap<>();
+                for (TownBlockTag townBlockTag : townblocks) {
+                    TownBlock townBlock = townBlockTag.getTownBlock();
+                    if (townBlock == null) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        throw new InvalidArgumentsRuntimeException("A specified townblock is invalid/null.");
                     }
+                    if (townBlock.getTownOrNull() != town.getTown()) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        throw new InvalidArgumentsRuntimeException("townblocks must all be from the specified town!");
+                    }
+
+                    // Safety: don't silently steal townblocks from other groups.
+                    PlotGroup existing = townBlock.getPlotObjectGroup();
+                    if (existing != null) {
+                        scriptEntry.saveObject("result", new ElementTag("failure"));
+                        scriptEntry.setFinished(true);
+                        throw new InvalidArgumentsRuntimeException("A specified townblock already belongs to a plotgroup: " + existing.getName());
+                    }
+
+                    uniqueBlocks.putIfAbsent(townBlock.getWorldCoord(), townBlock);
                 }
 
                 if (town.getTown().hasPlotGroupName(name)) {
@@ -73,13 +94,15 @@ public class PlotGroupCommand extends AbstractCommand {
                 UUID uuid = UUID.randomUUID();
                 PlotGroup plotGroup = new PlotGroup(uuid, name, town.getTown());
 
-                if (townblocks != null) {
-                    for (TownBlockTag townBlockTag : townblocks) {
-                        TownBlock townBlock = townBlockTag.getTownBlock();
-                        plotGroup.addTownBlock(townBlock);
-                        townBlock.setPlotObjectGroup(plotGroup);
-                        dataSource.saveTownBlock(townBlock);
-                    }
+                // Permissions from first unique block (guaranteed to exist).
+                TownBlock firstBlock = uniqueBlocks.values().iterator().next();
+                plotGroup.setPermissions(firstBlock.getPermissions());
+
+                // Add each unique block exactly once.
+                for (TownBlock townBlock : uniqueBlocks.values()) {
+                    //plotGroup.addTownBlock(townBlock);
+                    townBlock.setPlotObjectGroup(plotGroup);
+                    dataSource.saveTownBlock(townBlock);
                 }
 
                 town.getTown().addPlotGroup(plotGroup);
@@ -88,14 +111,15 @@ public class PlotGroupCommand extends AbstractCommand {
                 dataSource.savePlotGroup(plotGroup);
 
                 scriptEntry.saveObject("created_plotgroup", new PlotGroupTag(plotGroup));
-                TownBlock townblock = townblocks != null && !townblocks.isEmpty() ? townblocks.get(0).townBlock : null;
+
                 PlayerTag player = Utilities.getEntryPlayer(scriptEntry);
-                PlotGroupCreatedEvent plotGroupCreatedEvent = new PlotGroupCreatedEvent(plotGroup, townblock, player.getPlayerEntity());
+                PlotGroupCreatedEvent plotGroupCreatedEvent = new PlotGroupCreatedEvent(plotGroup, firstBlock, player.getPlayerEntity());
                 Bukkit.getPluginManager().callEvent(plotGroupCreatedEvent);
 
                 scriptEntry.saveObject("result", new ElementTag("success"));
                 scriptEntry.setFinished(true);
             }
+
 
             case DELETE -> {
                 PlotGroup plotGroup;

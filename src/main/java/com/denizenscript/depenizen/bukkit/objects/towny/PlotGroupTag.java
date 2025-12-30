@@ -175,6 +175,14 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ElementTag.class, "name", (attribute, object) ->
                 new ElementTag(object.plotGroup.getName()));
 
+        tagProcessor.registerTag(ListTag.class, "trusted_residents", ((attribute, object) -> {
+            ListTag list = new ListTag();
+            for (Resident resident : object.plotGroup.getTrustedResidents()){
+                PlayerTag playerTag = new PlayerTag(resident.getUUID());
+                list.addObject(playerTag);
+            }
+            return  list;
+        }));
         // <--[tag]
         // @attribute <PlotGroupTag.town>
         // @returns TownTag
@@ -779,6 +787,8 @@ public class PlotGroupTag implements ObjectTag, Adjustable, FlaggableObject {
             for (TownBlock newBlock : newBlocks) {
                 if (!oldBlocks.contains(newBlock)) {
                     try {
+                        if (plotGroup.getTownBlocks().contains(newBlock))
+                            continue;
                         var type = plotGroup.getTownBlockType();
                      //   var oldType = newBlock.getType();
                         newBlock.setType(type);

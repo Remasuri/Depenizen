@@ -23,6 +23,7 @@ import com.palmergames.bukkit.towny.object.WorldCoord;
 import com.palmergames.bukkit.towny.regen.PlotBlockData;
 import com.palmergames.bukkit.towny.regen.TownyRegenAPI;
 import com.palmergames.bukkit.towny.utils.NameUtil;
+import com.palmergames.bukkit.towny.utils.ProximityUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -137,6 +138,14 @@ public class TownCommand extends AbstractCommand {
                 if (api.getTownBlock(worldCoord) != null) {
                     scriptEntry.saveObject("result", new ElementTag("failure"));
                     Debug.echoError("Homeblock location is already claimed by another town.");
+                    scriptEntry.setFinished(true);
+                    return;
+                }
+                try{
+                    ProximityUtil.allowTownHomeBlockOrThrow(townyWorld,worldCoord,null,true);
+                } catch (TownyException e) {
+                    scriptEntry.saveObject("result", new ElementTag("failure"));
+                    Debug.echoError("Homeblock location is not allowed here due to distance rules");
                     scriptEntry.setFinished(true);
                     return;
                 }

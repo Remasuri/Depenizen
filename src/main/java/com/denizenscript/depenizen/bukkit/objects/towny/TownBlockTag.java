@@ -317,6 +317,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
             WorldCoord blockLocation = object.townBlock.getWorldCoord();
             return new LocationTag(blockLocation.getLowerMostCornerLocation());
         }));
+
         // <--[tag]
         // @attribute <TownBlockTag.at_offset[<x>,<z>]>
         // @returns TownBlockTag
@@ -496,7 +497,7 @@ public class TownBlockTag implements ObjectTag, Adjustable, FlaggableObject {
         tagProcessor.registerTag(ListTag.class, "trusted_residents",((attribute, object) -> {
             ListTag list = new ListTag();
             for (Resident resident : object.townBlock.getTrustedResidents()){
-                PlayerTag playerTag = new PlayerTag(resident.getPlayer());
+                PlayerTag playerTag = new PlayerTag(resident.getUUID());
                 list.addObject(playerTag);
             }
             return  list;

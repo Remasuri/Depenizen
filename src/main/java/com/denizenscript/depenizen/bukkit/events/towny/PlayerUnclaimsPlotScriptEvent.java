@@ -9,6 +9,7 @@ import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownBlockTag;
 import com.denizenscript.depenizen.bukkit.objects.towny.TownTag;
+import com.denizenscript.depenizen.bukkit.objects.towny.WorldCoordTag;
 import com.palmergames.bukkit.towny.event.town.TownPreUnclaimCmdEvent;
 import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.WorldCoord;
@@ -78,26 +79,19 @@ public class PlayerUnclaimsPlotScriptEvent extends BukkitScriptEvent implements 
             case "town":
                 return new TownTag(event.getTown());
 
-            case "townblocks": {
+            case "worldcoords": {
                 ListTag list = new ListTag();
                 for (WorldCoord coord : event.getUnclaimSelection()) {
-                    TownBlock tb = coord.getTownBlockOrNull();
-                    if (tb != null) {
-                        list.addObject(new TownBlockTag(tb));
-                    }
+                    //TownBlock tb = coord.getTownBlockOrNull();
+                    //if (tb != null) {
+                        list.addObject(new WorldCoordTag(coord));
+                    //}
                 }
                 return list;
             }
 
-            case "townblock": {
-                // Convenience: first block in the selection (if any)
-                for (WorldCoord coord : event.getUnclaimSelection()) {
-                    TownBlock tb = coord.getTownBlockOrNull();
-                    if (tb != null) {
-                        return new TownBlockTag(tb);
-                    }
-                }
-                return null;
+            case "worldcoord": {
+                return new WorldCoordTag(event.getUnclaimSelection().getFirst());
             }
         }
         return super.getContext(name);

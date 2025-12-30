@@ -32,6 +32,7 @@ import com.denizenscript.denizencore.tags.TagManager;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownySettings.TownLevel;
+import com.palmergames.bukkit.towny.utils.ProximityUtil;
 import org.bukkit.World;
 
 import java.util.ArrayList;
@@ -149,7 +150,6 @@ public class TownyBridge extends Bridge {
             event.setReplacedObject(towns.getObjectAttribute(attribute.fulfill(1)));
             return;
         }
-
         // <--[tag]
         // @attribute <towny.town_block_size>
         // @returns ElementTag(Number)
